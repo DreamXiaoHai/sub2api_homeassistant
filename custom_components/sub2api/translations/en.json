@@ -1,0 +1,47 @@
+{
+  "title": "sub2API Subscription",
+  "config": {
+    "flow_title": "sub2API Subscription",
+    "step": {
+      "user": {
+        "title": "Connect to sub2API",
+        "description": "Enter the HTTPS address of the sub2API site and the two tokens from the signed-in browser's Local Storage. Model API keys cannot access subscription data.",
+        "data": {
+          "base_url": "Site address",
+          "access_token": "Access token (auth_token)",
+          "refresh_token": "Refresh token"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect to sub2API",
+        "description": "The saved session can no longer be refreshed. Enter a new token pair from the same account.",
+        "data": {
+          "access_token": "Access token (auth_token)",
+          "refresh_token": "Refresh token"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to the sub2API site.",
+      "invalid_auth": "The access or refresh token is invalid.",
+      "invalid_response": "The site returned an unsupported response.",
+      "invalid_url": "Enter a valid HTTPS site address.",
+      "unknown": "Unexpected error.",
+      "wrong_account": "These tokens belong to a different account."
+    },
+    "abort": {
+      "already_configured": "This sub2API account is already configured.",
+      "reauth_successful": "Authentication was updated successfully."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "daily_used": { "name": "Daily used" },
+      "daily_limit": { "name": "Daily limit" },
+      "daily_reset": { "name": "Daily reset" },
+      "weekly_used": { "name": "Weekly used" },
+      "weekly_limit": { "name": "Weekly limit" },
+      "weekly_reset": { "name": "Weekly reset" }
+    }
+  }
+}

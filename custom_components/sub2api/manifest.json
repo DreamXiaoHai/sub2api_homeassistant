@@ -1,0 +1,11 @@
+{
+  "domain": "sub2api",
+  "name": "sub2API Subscription",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://github.com/Wei-Shaw/sub2api",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "0.1.0"
+}

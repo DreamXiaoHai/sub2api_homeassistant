@@ -1,0 +1,83 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Test, type-checker, and coverage output
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+junit.xml
+pytestdebug.log
+
+# Python build and packaging output
+build/
+dist/
+.eggs/
+*.egg
+*.egg-info/
+pip-wheel-metadata/
+
+# Local Home Assistant runtime data
+config/
+.storage/
+.HA_VERSION
+deps/
+tts/
+backups/
+home-assistant.log*
+home-assistant_v2.db*
+home-assistant_v2.db-*
+
+# Credentials and local environment files
+.env
+.env.*
+!.env.example
+secrets.yaml
+*.secrets.yaml
+credentials.json
+tokens.json
+
+# Editor and IDE settings
+.idea/
+.vscode/
+*.code-workspace
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# Operating system metadata
+.DS_Store
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Logs, temporary files, and local archives
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+pip-install.*

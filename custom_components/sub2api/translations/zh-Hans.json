@@ -1,0 +1,47 @@
+{
+  "title": "sub2API 订阅",
+  "config": {
+    "flow_title": "sub2API 订阅",
+    "step": {
+      "user": {
+        "title": "连接 sub2API",
+        "description": "请输入 sub2API 站点的 HTTPS 地址，以及已登录网页 Local Storage 中的两个令牌。模型 API Key 无法读取订阅数据。",
+        "data": {
+          "base_url": "站点地址",
+          "access_token": "访问令牌（auth_token）",
+          "refresh_token": "刷新令牌"
+        }
+      },
+      "reauth_confirm": {
+        "title": "重新连接 sub2API",
+        "description": "已保存的登录会话无法继续刷新。请输入同一账号的新令牌。",
+        "data": {
+          "access_token": "访问令牌（auth_token）",
+          "refresh_token": "刷新令牌"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "无法连接 sub2API 站点。",
+      "invalid_auth": "访问令牌或刷新令牌无效。",
+      "invalid_response": "站点返回了不支持的数据。",
+      "invalid_url": "请输入有效的 HTTPS 站点地址。",
+      "unknown": "发生未知错误。",
+      "wrong_account": "这些令牌属于另一个账号。"
+    },
+    "abort": {
+      "already_configured": "这个 sub2API 账号已经配置。",
+      "reauth_successful": "认证信息已更新。"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "daily_used": { "name": "每日已用" },
+      "daily_limit": { "name": "每日总额" },
+      "daily_reset": { "name": "每日重置" },
+      "weekly_used": { "name": "每周已用" },
+      "weekly_limit": { "name": "每周总额" },
+      "weekly_reset": { "name": "每周重置" }
+    }
+  }
+}

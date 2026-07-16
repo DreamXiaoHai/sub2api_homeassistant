@@ -1,0 +1,68 @@
+# Replace the entity IDs and mobile notification service with your own values.
+alias: 通知：sub2API 额度发生重置
+description: 每日或每周已用额度从大于 0 突然变为 0，并且重置时间仍在未来时发送手机通知
+triggers:
+  - trigger: state
+    entity_id:
+      - sensor.codex_subscription_daily_used
+      - sensor.codex_subscription_weekly_used
+conditions:
+  - condition: template
+    value_template: >
+      {% set old_state = trigger.from_state.state if trigger.from_state is not none else 'unknown' %}
+      {% set new_state = trigger.to_state.state if trigger.to_state is not none else 'unknown' %}
+      {{
+        old_state not in ['unknown', 'unavailable', 'none', '']
+        and new_state not in ['unknown', 'unavailable', 'none', '']
+        and (old_state | float(0)) > 0
+        and (new_state | float(0)) == 0
+      }}
+  - condition: template
+    value_template: >
+      {% set reset_entity =
+        'sensor.codex_subscription_daily_reset'
+        if trigger.entity_id == 'sensor.codex_subscription_daily_used'
+        else 'sensor.codex_subscription_weekly_reset'
+      %}
+      {% set reset_timestamp = as_timestamp(states(reset_entity), 0) %}
+      {{ reset_timestamp == 0 or reset_timestamp > as_timestamp(now()) }}
+actions:
+  - variables:
+      quota_period: >
+        {{
+          '每日'
+          if trigger.entity_id == 'sensor.codex_subscription_daily_used'
+          else '每周'
+        }}
+      limit_entity: >
+        {{
+          'sensor.codex_subscription_daily_limit'
+          if trigger.entity_id == 'sensor.codex_subscription_daily_used'
+          else 'sensor.codex_subscription_weekly_limit'
+        }}
+      reset_entity: >
+        {{
+          'sensor.codex_subscription_daily_reset'
+          if trigger.entity_id == 'sensor.codex_subscription_daily_used'
+          else 'sensor.codex_subscription_weekly_reset'
+        }}
+      subscription_name: >
+        {{ trigger.to_state.attributes.get('group_name', 'sub2API 订阅') }}
+      previous_used: >
+        {{ trigger.from_state.state | float(0) }}
+  - action: notify.mobile_app_your_phone
+    data:
+      title: "✅ sub2API {{ quota_period }}额度已重置"
+      message: >
+        {{ subscription_name }} 的{{ quota_period }}额度发生重置。
+        重置前已用：${{ previous_used | float(0) | round(2) }}；
+        总额度：${{ states(limit_entity) | float(0) | round(2) }}；
+        当前已用：${{ states(trigger.entity_id) | float(0) | round(2) }}；
+        下次重置：{% set reset_timestamp = as_timestamp(states(reset_entity), 0) %}
+        {{ reset_timestamp | timestamp_custom('%Y-%m-%d %H:%M:%S', true)
+           if reset_timestamp > 0 else '暂不可用' }}。
+      data:
+        priority: high
+        ttl: 0
+mode: queued
+max: 10
