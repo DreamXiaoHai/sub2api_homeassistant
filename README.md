@@ -573,4 +573,4 @@ This repository is not an official sub2API Home Assistant integration.
 
 ---
 
-[Buy me a coffee](https://www.buymeacoffee.com/dreamxiaohai)
+[![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://www.buymeacoffee.com/dreamxiaohai)

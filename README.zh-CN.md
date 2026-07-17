@@ -542,4 +542,4 @@ GitHub Actions 会继续运行单元测试、`ruff`、HACS validation 和 hassfe
 
 ---
 
-[Buy me a coffee](https://www.buymeacoffee.com/dreamxiaohai)
+[![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://www.buymeacoffee.com/dreamxiaohai)
