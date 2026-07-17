@@ -1,96 +1,109 @@
+[简体中文](README.zh-CN.md)
+
 # sub2API Subscription for Home Assistant
 
-将 [sub2API](https://github.com/Wei-Shaw/sub2api) 账号中的订阅额度同步到
-Home Assistant，并以传感器、Lovelace 卡片和自动化通知的方式使用这些数据。
+Sync subscription quotas from a [sub2API](https://github.com/Wei-Shaw/sub2api)
+account to Home Assistant and use the data in sensors, Lovelace cards, history,
+and automations.
 
-本项目适合希望在 Home Assistant 中查看以下信息的用户：
+This integration exposes:
 
-- 每日已用金额和每日总额度
-- 每周已用金额和每周总额度
-- 每日、每周额度的下一次重置时间
-- 剩余额度和使用百分比
-- 多个有效订阅的独立状态
+- Daily usage and daily quota
+- Weekly usage and weekly quota
+- The next daily and weekly reset times
+- Remaining quota and usage percentage
+- Separate devices and sensors for multiple active subscriptions
 
 > [!IMPORTANT]
-> 本集成使用 sub2API 网页登录会话的 `auth_token` 和 `refresh_token`。
-> 模型调用使用的 API Key 无法访问订阅接口。不要把令牌提交到 GitHub、
-> 发送到聊天或写入公开日志。
+> This integration uses the `auth_token` and `refresh_token` from a sub2API
+> web login session. An API key intended for model requests cannot access the
+> subscription endpoints. Never commit tokens to GitHub, send them in chat, or
+> include them in public logs.
 
-## 目录
+## Table of contents
 
-- [工作原理](#工作原理)
-- [安装前准备](#安装前准备)
-- [安装集成](#安装集成)
-- [获取 sub2API 令牌](#获取-sub2api-令牌)
-- [在 Home Assistant 中添加集成](#在-home-assistant-中添加集成)
-- [认识生成的实体](#认识生成的实体)
-- [创建 Lovelace 仪表盘](#创建-lovelace-仪表盘)
-- [配置额度重置通知](#配置额度重置通知)
-- [令牌刷新与重新认证](#令牌刷新与重新认证)
-- [更新和卸载](#更新和卸载)
-- [常见问题](#常见问题)
-- [仓库结构](#仓库结构)
-- [开发与验证](#开发与验证)
+- [How it works](#how-it-works)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Getting sub2API tokens](#getting-sub2api-tokens)
+- [Adding the integration](#adding-the-integration)
+- [Entities](#entities)
+- [Creating a Lovelace dashboard card](#creating-a-lovelace-dashboard-card)
+- [Quota reset notifications](#quota-reset-notifications)
+- [Token refresh and reauthentication](#token-refresh-and-reauthentication)
+- [Updating and uninstalling](#updating-and-uninstalling)
+- [Troubleshooting](#troubleshooting)
+- [Repository structure](#repository-structure)
+- [Development](#development)
 
-## 工作原理
+## How it works
 
-集成每 5 分钟调用一次 sub2API 的用户订阅接口：
+Every five minutes, the integration calls the authenticated sub2API
+subscription endpoint:
 
 ```text
 GET /api/v1/subscriptions/progress
 ```
 
-Home Assistant 中的数据流如下：
+The data flow is:
 
 ```text
-sub2API 订阅接口
-        ↓
-sub2API Subscription 集成
-        ↓
-每日/每周传感器
-        ↓
-Lovelace 卡片、历史记录和自动化
+sub2API subscription endpoint
+              |
+              v
+sub2API Subscription integration
+              |
+              v
+Daily and weekly sensors
+              |
+              v
+Lovelace cards, history, and automations
 ```
 
-集成会自动发现当前账号下的全部有效订阅。每个订阅对应一个 Home
-Assistant 设备，并根据该订阅配置的额度窗口创建传感器。新增订阅会自动
-出现；失效或被移除的订阅实体会保留在实体注册表中，但状态会变成不可用。
+The integration discovers every active subscription belonging to the
+configured account. Each subscription becomes a Home Assistant device, with
+sensors created for the quota windows available on that subscription. New
+subscriptions are discovered automatically. If a subscription expires or
+disappears, its registered entities remain in Home Assistant but become
+unavailable.
 
-## 安装前准备
+## Requirements
 
-请先确认以下条件：
+Before installing, make sure that:
 
-- Home Assistant 版本为 **2025.1.0 或更新版本**
-- Home Assistant 所在机器可以通过 HTTPS 访问 sub2API 站点
-- 可以在浏览器中正常登录目标 sub2API 账号
-- 可以访问 Home Assistant 的 `/config` 配置目录，或者已经安装 HACS
+- Home Assistant is **2025.1.0 or newer**
+- The Home Assistant host can reach the sub2API site over HTTPS
+- You can sign in to the target sub2API account in a browser
+- You can access the Home Assistant `/config` directory, or HACS is installed
 
-如果 Home Assistant 和 sub2API 不在同一台机器上，请从 Home Assistant
-机器测试域名是否可以正常解析和访问。反向代理、防火墙和 DNS 配置都可能
-导致浏览器可以访问、Home Assistant 却无法访问。
+If Home Assistant and sub2API run on different machines, test DNS resolution
+and HTTPS access from the Home Assistant host. A reverse proxy, firewall, or
+DNS configuration can allow browser access while still blocking Home
+Assistant.
 
-## 安装集成
+## Installation
 
-选择 HACS 或手动安装其中一种方式即可。
+Choose either HACS or manual installation.
 
-### 方法一：通过 HACS 安装
+### Option 1: HACS
 
-仓库发布到 GitHub 后，可以把它作为 HACS 自定义仓库使用：
+Add this GitHub repository as a HACS custom repository:
 
-1. 打开 Home Assistant 中的 **HACS**。
-2. 进入 **集成**。
-3. 点击右上角菜单，选择 **自定义仓库**。
-4. 填写本项目的 GitHub 仓库地址。
-5. 类别选择 **集成**，然后添加仓库。
-6. 搜索并下载 **sub2API Subscription**。
-7. 完全重启 Home Assistant。
+1. Open **HACS** in Home Assistant.
+2. Open **Integrations**.
+3. Open the menu in the upper-right corner and select **Custom repositories**.
+4. Enter this repository's GitHub URL.
+5. Select **Integration** as the category and add the repository.
+6. Find and download **sub2API Subscription**.
+7. Fully restart Home Assistant.
 
-HACS 只能从 GitHub 仓库安装，不能直接读取另一台电脑上的本地目录。
+HACS installs from GitHub. It cannot install directly from a local directory
+on another computer.
 
-### 方法二：手动安装
+### Option 2: Manual installation
 
-把仓库中的整个 `custom_components/sub2api` 文件夹复制到 Home
-Assistant 配置目录。最终目录必须是：
+Copy the entire `custom_components/sub2api` directory from this repository to
+the Home Assistant configuration directory. The final layout must be:
 
 ```text
 /config/
@@ -108,182 +121,196 @@ Assistant 配置目录。最终目录必须是：
         └── translations/
 ```
 
-常见部署方式对应的操作如下：
+#### Home Assistant OS or Supervised
 
-#### Home Assistant OS / Supervised
-
-可以使用 Samba share、Studio Code Server 或 Terminal & SSH 加载项，把
-文件复制到：
+Use the Samba share, Studio Code Server, or Terminal & SSH add-on to copy the
+directory to:
 
 ```text
 /config/custom_components/sub2api
 ```
 
-#### Home Assistant Container（Docker）
+#### Home Assistant Container
 
-找到容器映射的宿主机配置目录。例如启动参数包含：
+Find the host directory mounted as `/config`. For example, if the container
+was started with:
 
 ```text
 -v /opt/homeassistant/config:/config
 ```
 
-则应复制到：
+copy the integration to:
 
 ```text
 /opt/homeassistant/config/custom_components/sub2api
 ```
 
-不要只复制进容器临时文件系统，否则重新创建容器后文件会消失。
+Do not copy it only into the container's temporary filesystem. It would be
+lost when the container is recreated.
 
 #### Home Assistant Core
 
-将组件复制到 `configuration.yaml` 所在目录下的：
+Copy the integration to `custom_components/sub2api` under the directory that
+contains `configuration.yaml`.
 
-```text
-custom_components/sub2api
-```
-
-复制完成后，必须完全重启 Home Assistant。仅重新加载 YAML 不会加载新的
-自定义集成。
+After copying the files, fully restart Home Assistant. Reloading YAML alone
+does not load a new custom integration.
 
 > [!WARNING]
-> 常见错误是多复制了一层目录。正确路径是
-> `/config/custom_components/sub2api/manifest.json`，而不是
-> `/config/custom_components/sub2api/custom_components/sub2api/manifest.json`。
+> A common installation mistake is adding an extra directory level. The
+> correct path is `/config/custom_components/sub2api/manifest.json`, not
+> `/config/custom_components/sub2api/custom_components/sub2api/manifest.json`.
 
-## 获取 sub2API 令牌
+## Getting sub2API tokens
 
-推荐从已经登录的 sub2API 网页读取令牌，这种方式兼容第三方站点的验证码、
-Turnstile 和双因素认证。
+Reading the tokens from a signed-in sub2API page supports third-party sites
+that use CAPTCHA, Turnstile, OAuth, or two-factor authentication.
 
-以 Chrome 或 Edge 为例：
+In Chrome or Edge:
 
-1. 在浏览器中登录目标 sub2API 站点。
-2. 按 `F12` 打开开发者工具。
-3. 进入 **Application（应用）**。
-4. 展开 **Local Storage（本地存储）**。
-5. 选择当前 sub2API 站点。
-6. 找到并复制 `auth_token` 的值。
-7. 找到并复制 `refresh_token` 的值。
+1. Sign in to the target sub2API site.
+2. Press `F12` to open Developer Tools.
+3. Open **Application**.
+4. Expand **Local Storage**.
+5. Select the current sub2API site.
+6. Copy the value of `auth_token`.
+7. Copy the value of `refresh_token`.
 
-Firefox 中对应的位置是 **Storage（存储）** > **Local Storage**。
+In Firefox, use **Storage** > **Local Storage**.
 
-请注意：
+Keep the following in mind:
 
-- 复制的是字段的值，不要把字段名一起复制。
-- 不要使用以模型调用为目的的 API Key。
-- 两个令牌必须来自同一个 sub2API 站点和同一个账号。
-- 获取令牌后可以关闭开发者工具，不需要保持网页一直打开。
+- Copy only the value, without the field name.
+- Do not use a model API key.
+- Both tokens must come from the same site and account.
+- Prefer a dedicated private browsing session, then close it without signing
+  out after Home Assistant has been configured.
+- Do not keep a browser session using the same refresh token active. sub2API
+  rotates refresh tokens, so whichever client refreshes first invalidates the
+  other client's copy.
 
-## 在 Home Assistant 中添加集成
+> [!WARNING]
+> Current sub2API versions enable IP and User-Agent session binding by default.
+> A token created in a browser can therefore be rejected when Home Assistant
+> on another machine tries to refresh it. If you administer the sub2API site,
+> disable session IP/UA binding for this workflow, or provide Home Assistant
+> with a dedicated session issued in a compatible environment.
 
-安装并重启 Home Assistant 后：
+## Adding the integration
 
-1. 打开 **设置** > **设备与服务**。
-2. 点击 **添加集成**。
-3. 搜索 **sub2API Subscription**。
-4. 填写 sub2API 站点地址。
-5. 粘贴 access token，即网页中的 `auth_token`。
-6. 粘贴 refresh token。
-7. 提交配置。
+After installation and a full Home Assistant restart:
 
-站点地址推荐填写根地址：
+1. Open **Settings** > **Devices & services**.
+2. Select **Add integration**.
+3. Search for **sub2API Subscription**.
+4. Enter the base URL of the sub2API site.
+5. Paste the access token, which is `auth_token` in Local Storage.
+6. Paste the refresh token.
+7. Submit the form.
+
+Use the site root as the base URL:
 
 ```text
 https://sub2api.example.com
 ```
 
-以下形式也可以，集成会自动移除末尾的 `/api/v1`：
+The following form also works; the integration removes the trailing
+`/api/v1` automatically:
 
 ```text
 https://sub2api.example.com/api/v1
 ```
 
-出于令牌安全考虑，集成只接受 HTTPS 地址，不支持普通公网 HTTP 地址。
+For token security, only HTTPS URLs are accepted.
 
-配置成功后，可以在集成页面看到账号和自动发现的订阅设备。同一个站点的
-不同用户可以分别添加；同一站点的同一用户不能重复添加。
+After setup, the integration page displays the account and every discovered
+subscription device. Different users on the same site and accounts on
+different sub2API sites can be added separately. The same user on the same
+site cannot be added twice.
 
-## 认识生成的实体
+## Entities
 
-每个订阅最多创建 6 个传感器。没有配置相应额度的订阅不会创建该组实体。
+Each subscription creates up to six sensors. A group is omitted when that
+subscription has no corresponding quota window.
 
-| 传感器 | 内容 | 单位 | 主要属性 |
+| Sensor | State | Unit | Main attributes |
 |---|---|---|---|
-| 每日已用 | 当前每日窗口已使用金额 | USD | `remaining_usd`、`percentage`、`window_start` |
-| 每日总额 | 每日额度上限 | USD | 订阅和分组信息 |
-| 每日重置 | 每日窗口下一次重置时间 | 时间戳 | `resets_in_seconds` |
-| 每周已用 | 当前每周窗口已使用金额 | USD | `remaining_usd`、`percentage`、`window_start` |
-| 每周总额 | 每周额度上限 | USD | 订阅和分组信息 |
-| 每周重置 | 每周窗口下一次重置时间 | 时间戳 | `resets_in_seconds` |
+| Daily used | Amount used in the current daily window | USD | `remaining_usd`, `percentage`, `window_start` |
+| Daily limit | Daily quota limit | USD | Subscription and group information |
+| Daily reset | Next daily reset | Timestamp | `resets_in_seconds` |
+| Weekly used | Amount used in the current weekly window | USD | `remaining_usd`, `percentage`, `window_start` |
+| Weekly limit | Weekly quota limit | USD | Subscription and group information |
+| Weekly reset | Next weekly reset | Timestamp | `resets_in_seconds` |
 
-实体 ID 由 Home Assistant 根据订阅名称生成，因此不同用户的实体 ID 不一定
-相同。仓库示例使用的 `sensor.codex_subscription_*` 只是占位符。
+Home Assistant generates entity IDs from subscription names, so IDs differ
+between installations. The `sensor.codex_subscription_*` IDs in this
+repository are placeholders.
 
-查找实际实体 ID：
+To find the actual IDs:
 
-1. 打开 **开发者工具** > **状态**。
-2. 搜索 `daily_used`、`daily_limit`、`daily_reset`、`weekly_used`、
-   `weekly_limit` 或 `weekly_reset`。
-3. 也可以在 **设置** > **设备与服务** > **sub2API Subscription** 中打开
-   对应订阅设备，查看它的全部实体。
+1. Open **Developer tools** > **States**.
+2. Search for `daily_used`, `daily_limit`, `daily_reset`,
+   `weekly_used`, `weekly_limit`, or `weekly_reset`.
+3. Alternatively, open the subscription device under **Settings** >
+   **Devices & services** > **sub2API Subscription**.
 
-如果额度已经配置但窗口尚未激活，已用和总额仍可显示，重置时间会暂时显示
-为不可用。
+If a quota exists but its window has not started, the used and limit sensors
+can still have values while the reset sensor is temporarily unavailable.
 
-## 创建 Lovelace 仪表盘
+## Creating a Lovelace dashboard card
 
-Lovelace 是 Home Assistant 仪表盘系统的传统名称。集成负责产生实体，
-Lovelace 卡片负责把实体展示出来。
+Lovelace is the traditional name for Home Assistant's dashboard system. The
+integration provides entities; Lovelace cards display them.
 
-### 原生实体卡片
+### Built-in Entities card
 
-不安装任何前端插件也可以使用原生实体卡片。打开仪表盘编辑模式，添加
-**手动卡片**，把下面的占位符替换成实际实体 ID：
+No frontend extension is required for an Entities card. Edit a dashboard, add
+a **Manual** card, and replace the placeholder entity IDs:
 
 ```yaml
 type: entities
-title: sub2API 订阅额度
+title: sub2API Quota
 entities:
   - entity: sensor.codex_subscription_daily_used
-    name: 每日已用
+    name: Daily used
   - entity: sensor.codex_subscription_daily_limit
-    name: 每日总额
+    name: Daily limit
   - entity: sensor.codex_subscription_daily_reset
-    name: 每日重置
+    name: Daily reset
   - entity: sensor.codex_subscription_weekly_used
-    name: 每周已用
+    name: Weekly used
   - entity: sensor.codex_subscription_weekly_limit
-    name: 每周总额
+    name: Weekly limit
   - entity: sensor.codex_subscription_weekly_reset
-    name: 每周重置
+    name: Weekly reset
 ```
 
-### 仿 sub2API 进度卡片
+### sub2API-style progress card
 
-仓库提供了更接近 sub2API 网页效果的进度卡片：
+This repository includes a card styled after the sub2API quota display:
 
 [`lovelace/sub2api-quota-card.yaml`](lovelace/sub2api-quota-card.yaml)
 
-该卡片显示：
+It displays:
 
-- 订阅名称、平台和有效状态
-- 每日及每周的已用金额和总额度
-- 根据使用百分比变化的进度条颜色
-- 距离下一次重置的动态倒计时
-- Home Assistant 浅色和深色主题适配
+- Subscription name, platform, and availability
+- Daily and weekly usage and limits
+- Progress bar colors based on usage percentage
+- Live countdowns to the next resets
+- Home Assistant light and dark theme support
 
-这张卡片依赖 HACS 前端插件 `button-card`：
+The card requires the HACS frontend extension
+[`button-card`](https://github.com/custom-cards/button-card):
 
-1. 打开 **HACS** > **前端**。
-2. 搜索并安装 **button-card**。
-3. 根据 HACS 提示重新加载浏览器或重启 Home Assistant。
-4. 打开 `lovelace/sub2api-quota-card.yaml`。
-5. 修改文件顶部 `variables` 中的 6 个实体 ID。
-6. 可选：修改 `fallback_title`。
-7. 在仪表盘中添加 **手动卡片**，粘贴整个 YAML 文件内容。
+1. Open **HACS** > **Frontend**.
+2. Find and install **button-card**.
+3. Reload the browser or restart Home Assistant as instructed by HACS.
+4. Open `lovelace/sub2api-quota-card.yaml`.
+5. Replace the six entity IDs at the top of the file.
+6. Optionally change `fallback_title`.
+7. Add a **Manual** dashboard card and paste the entire YAML file.
 
-需要替换的部分集中在文件开头：
+The values that need editing are grouped at the top:
 
 ```yaml
 variables:
@@ -296,187 +323,225 @@ variables:
   fallback_title: Codex Subscription
 ```
 
-如果一个账号有多个订阅，请为每个订阅复制一张卡片，并分别填写对应实体。
+For multiple subscriptions, create one copy of the card per subscription and
+use the matching entity IDs in each card.
 
-如果页面显示 `Custom element doesn't exist: button-card`，说明 `button-card`
-没有正确安装或浏览器仍在使用旧缓存。确认 HACS 资源已经加载后，强制刷新
-浏览器页面。
+If the dashboard reports `Custom element doesn't exist: button-card`, verify
+that button-card is installed, that its HACS resource is loaded, and then
+force-refresh the browser.
 
-## 配置额度重置通知
+## Quota reset notifications
 
-仓库提供了手机通知自动化：
+The repository includes a mobile notification automation:
 
 [`automations/sub2api-quota-reset-notification.yaml`](automations/sub2api-quota-reset-notification.yaml)
 
-它会同时监听每日和每周已用额度。当状态从大于 0 突然变为 0，并且当前记录
-的重置时间仍在未来或暂不可用时，向手机发送消息。它会忽略
-`unknown`、`unavailable` 以及 Home Assistant 启动期间的无效状态变化。
+It monitors daily and weekly usage. When usage changes directly from a value
+greater than zero to zero while the recorded reset time is still in the
+future or temporarily unavailable, it sends a mobile notification. It ignores
+`unknown`, `unavailable`, and invalid transitions during Home Assistant
+startup.
 
-### 准备手机通知服务
+### Prepare the mobile notification action
 
-1. 在手机上安装 Home Assistant Companion App。
-2. 使用该 App 登录当前 Home Assistant。
-3. 打开 **开发者工具** > **操作**。
-4. 搜索 `notify.mobile_app_`。
-5. 记录对应手机的完整操作名称，例如：
+1. Install the Home Assistant Companion App on the phone.
+2. Connect the app to this Home Assistant instance.
+3. Open **Developer tools** > **Actions**.
+4. Search for `notify.mobile_app_`.
+5. Note the complete action name, for example:
 
 ```text
 notify.mobile_app_your_phone
 ```
 
-### 添加自动化
+### Add the automation
 
-1. 打开 **设置** > **自动化与场景**。
-2. 新建一个空白自动化。
-3. 点击右上角菜单，选择 **以 YAML 编辑**。
-4. 粘贴通知 YAML 文件的完整内容。
-5. 替换文件中的 6 个 `sensor.codex_subscription_*` 实体 ID。
-6. 把 `notify.mobile_app_your_phone` 替换成实际手机通知操作。
-7. 保存并启用自动化。
+1. Open **Settings** > **Automations & scenes**.
+2. Create an empty automation.
+3. Open the menu and select **Edit in YAML**.
+4. Paste the complete notification YAML file.
+5. Replace the six `sensor.codex_subscription_*` entity IDs.
+6. Replace `notify.mobile_app_your_phone` with the phone's notification
+   action.
+7. Save and enable the automation.
 
-自动化使用 `queued` 模式。如果每日和每周额度在同一次同步中同时归零，两条
-通知都会进入队列，不会因为前一条通知尚未完成而丢失后一条。
+The automation uses `queued` mode. If daily and weekly usage both reset in
+one update, both notifications are queued instead of one being discarded.
 
-不要直接使用“运行动作”测试这条自动化，因为通知内容依赖触发器提供的
-`trigger.from_state` 和 `trigger.to_state`。手动运行动作时没有这些数据。
+Do not test it with **Run actions**. Its message depends on
+`trigger.from_state` and `trigger.to_state`, which are not present when the
+actions are run manually.
 
-## 令牌刷新与重新认证
+## Token refresh and reauthentication
 
-sub2API 默认配置通常是：
+Default sub2API settings typically use:
 
-- access token 约 24 小时有效
-- refresh token 约 30 天有效
+- An access token valid for about 24 hours
+- A refresh token valid for about 30 days
 
-第三方站点可以修改这些期限，因此实际时间以站点配置为准。
+Third-party sites can change these values. An access token lifetime of two
+hours, for example, is a valid server-side configuration.
 
-access token 过期后，集成会自动使用 refresh token 获取并保存一对新令牌，
-然后重试原请求。正常持续运行时通常不需要人工更新。
+When an access token receives HTTP 401, the integration uses the refresh token
+to obtain and persist a rotated token pair, then retries the original request.
 
-以下情况可能触发 Home Assistant 的“需要重新认证”：
+Home Assistant starts a reauthentication flow when the refresh token cannot
+be used. Common causes include:
 
-- refresh token 已过期或被撤销
-- 用户修改了密码或站点撤销了会话
-- Home Assistant 长时间离线
-- 站点修改了登录或安全策略
+- The refresh token expired or was revoked
+- A browser already used and rotated the same refresh token
+- sub2API session IP/User-Agent binding rejected the Home Assistant request
+- The password changed or the site revoked the session
+- The site runs in backend mode and blocks refresh for non-admin users
+- The refresh-token cache was cleared during a server restart
+- The site changed its authentication or security policy
 
-看到重新认证提示后，重新登录 sub2API 网页，获取新的 `auth_token` 和
-`refresh_token`，然后在 Home Assistant 提示中粘贴即可。集成不会要求保存
-sub2API 邮箱或密码。
+When reauthentication is requested, obtain a fresh matching pair of
+`auth_token` and `refresh_token`, then submit them through the Home
+Assistant prompt. The integration does not store the sub2API password.
 
-## 更新和卸载
+## Updating and uninstalling
 
-### HACS 更新
+### Update through HACS
 
-在 HACS 中更新集成，然后根据提示重启 Home Assistant。
+Install the update in HACS, then restart Home Assistant when prompted.
 
-### 手动更新
+### Manual update
 
-使用新版本完整替换 `/config/custom_components/sub2api`，不要只替换其中一个
-Python 文件。替换后重启 Home Assistant。
+Replace the complete `/config/custom_components/sub2api` directory with the
+new version. Do not update only one Python file. Restart Home Assistant after
+copying.
 
-### 卸载
+### Uninstall
 
-1. 在 **设置** > **设备与服务** 中删除 `sub2API Subscription` 配置项。
-2. 通过 HACS 卸载，或删除 `/config/custom_components/sub2api`。
-3. 重启 Home Assistant。
-4. 如有需要，手动删除不再使用的 Lovelace 卡片和自动化。
+1. Remove the **sub2API Subscription** config entry under **Settings** >
+   **Devices & services**.
+2. Uninstall it through HACS, or delete
+   `/config/custom_components/sub2api`.
+3. Restart Home Assistant.
+4. Remove any Lovelace cards and automations that are no longer needed.
 
-## 常见问题
+## Troubleshooting
 
-### 添加集成时搜索不到 sub2API Subscription
+### The integration does not appear in the Add Integration dialog
 
-- 检查 `manifest.json` 是否位于
-  `/config/custom_components/sub2api/manifest.json`。
-- 确认没有多套一层目录。
-- 完全重启 Home Assistant。
-- 查看 **设置** > **系统** > **日志** 中是否有自定义集成加载错误。
+- Verify that `manifest.json` is located at
+  `/config/custom_components/sub2api/manifest.json`.
+- Make sure there is no extra directory level.
+- Fully restart Home Assistant.
+- Check **Settings** > **System** > **Logs** for custom integration errors.
 
-### 提示“无法连接 sub2API 站点”
+### Home Assistant cannot connect to the sub2API site
 
-- 确认填写的是 HTTPS 地址。
-- 确认 Home Assistant 机器可以访问该域名，而不只是电脑浏览器可以访问。
-- 检查 DNS、防火墙、反向代理和 TLS 证书。
-- 不要把登录页面的其他路径附加到站点地址。
+- Make sure the URL uses HTTPS.
+- Test access from the Home Assistant host, not only from a desktop browser.
+- Check DNS, firewall, reverse proxy, and TLS certificate settings.
+- Do not append unrelated login-page paths to the base URL.
 
-### 提示“访问令牌或刷新令牌无效”
+### The access or refresh token is rejected
 
-- 重新登录网页并获取一对新令牌。
-- 确认没有复制引号、空格或字段名称。
-- 确认两个令牌来自同一站点、同一账号。
-- 不要填写模型 API Key。
+- Sign in again and obtain a new matching token pair.
+- Check for copied quotes, spaces, or field names.
+- Confirm that both tokens belong to the same site and account.
+- Do not use a model API key.
+- Check whether session IP/User-Agent binding is enabled on the sub2API site.
+- Do not use one rotating refresh token in both a browser and Home Assistant.
 
-### 集成添加成功但没有订阅设备
+### The integration worked until the access token expired
 
-- 确认该账号在 sub2API 中存在有效订阅。
-- 确认订阅状态为 active 且尚未到期。
-- 打开 sub2API 网页，确认订阅页面本身可以显示额度。
+This usually means that normal API requests succeeded but token refresh was
+rejected. Check the sub2API server logs for:
 
-### 只有每日实体或只有每周实体
+```text
+SESSION_BINDING_MISMATCH
+REFRESH_TOKEN_INVALID
+Refresh token not found
+possible reuse attack
+```
 
-这是正常情况。集成只为订阅实际配置的额度窗口创建实体。
+If session binding is enabled, a token copied from a browser may not be
+refreshable by Home Assistant on another machine. If the same browser page
+remained active, it may also have rotated the refresh token before Home
+Assistant.
 
-### 重置时间显示不可用
+### Setup succeeds but no subscription device appears
 
-订阅额度窗口可能尚未激活。通常在该订阅第一次产生用量后，sub2API 才会
-设置窗口起点和重置时间。
+- Verify that the account has an active subscription.
+- Verify that the subscription is not expired.
+- Open the sub2API subscription page and confirm that it displays quota data.
 
-### Lovelace 卡片没有更新
+### Only daily or only weekly entities appear
 
-- 检查文件顶部的 6 个实体 ID。
-- 在开发者工具中确认实体本身正在更新。
-- 确认 `button-card` 已正确安装。
-- 强制刷新浏览器或清除 Home Assistant 前端缓存。
+This is expected. The integration creates sensors only for quota windows
+configured on that subscription.
 
-### 手机收不到通知
+### A reset-time sensor is unavailable
 
-- 确认 Companion App 已登录并允许通知权限。
-- 在开发者工具中单独测试手机的 `notify.mobile_app_*` 操作。
-- 检查自动化是否启用，以及跟踪记录中的条件判断结果。
-- 确认用量确实从大于 0 直接变成 0。
+The quota window may not have started. sub2API normally sets the window start
+and reset time after the subscription first records usage.
 
-### 是否支持月额度或订阅到期时间实体
+### The Lovelace card does not update
 
-当前 `0.1.0` 版本只创建每日和每周额度实体，暂不创建月额度、订阅状态或
-到期时间的独立实体。
+- Check all six entity IDs at the top of the YAML.
+- Verify in Developer Tools that the entities themselves are updating.
+- Confirm that button-card is installed and loaded.
+- Force-refresh the browser or clear the Home Assistant frontend cache.
 
-### 是否可以添加多个账号或多个站点
+### The phone does not receive notifications
 
-可以。同一个站点的不同用户、不同 sub2API 站点都可以分别添加。集成会把
-站点、用户和订阅 ID 组合成唯一标识，避免实体冲突。
+- Confirm that the Companion App is signed in and has notification permission.
+- Test the `notify.mobile_app_*` action in Developer Tools.
+- Check that the automation is enabled and inspect its traces.
+- Confirm that usage changed directly from a value greater than zero to zero.
 
-## 数据与安全
+### Are monthly quotas or subscription-expiration entities supported?
 
-- 访问令牌和刷新令牌保存在 Home Assistant 配置项存储中。
-- 令牌输入框使用密码类型，集成不会把令牌写入日志。
-- 集成不保存 sub2API 邮箱或密码。
-- 只接受 HTTPS 地址，避免通过明文 HTTP 传输令牌。
-- 金额单位保持为 sub2API 返回的 USD。
-- 仓库中的 URL、实体 ID、用户名和通知服务均为示例值。
-- YAML 示例不包含任何真实令牌。
+Version `0.1.0` creates only daily and weekly quota entities. Monthly quota,
+subscription status, and expiration-time entities are not currently exposed
+as separate sensors.
 
-## 仓库结构
+### Can multiple accounts or sites be added?
+
+Yes. Different users on one site and accounts on different sub2API sites can
+be configured separately. The site, user, and subscription IDs are combined
+into stable unique IDs to avoid entity collisions.
+
+## Data and security
+
+- Access and refresh tokens are stored in the Home Assistant config entry.
+- Token fields use password inputs, and tokens are never intentionally logged.
+- The integration does not store the sub2API email address or password.
+- Only HTTPS endpoints are accepted.
+- Monetary values retain the USD unit returned by sub2API.
+- Repository URLs, entity IDs, usernames, and notification actions are
+  placeholders.
+- No example YAML contains real tokens.
+
+## Repository structure
 
 ```text
 .
 ├── custom_components/
-│   └── sub2api/                       # Home Assistant 自定义集成
+│   └── sub2api/                       # Home Assistant custom integration
 ├── lovelace/
-│   └── sub2api-quota-card.yaml        # 可选的额度进度卡片
+│   └── sub2api-quota-card.yaml        # Optional quota progress card
 ├── automations/
 │   └── sub2api-quota-reset-notification.yaml
-│                                       # 可选的额度重置通知
-├── tests/                              # 自动化测试
-├── hacs.json                           # HACS 元数据
-├── pyproject.toml                      # 开发和测试配置
-└── README.md
+│                                       # Optional reset notification
+├── tests/                              # Automated tests
+├── hacs.json                           # HACS metadata
+├── pyproject.toml                      # Development and test configuration
+├── README.md                           # English documentation
+└── README.zh-CN.md                     # Simplified Chinese documentation
 ```
 
-安装集成时只需要 `custom_components/sub2api`。`lovelace` 和 `automations`
-目录是可选示例，不需要复制到 Home Assistant 配置目录，也不会被自动加载。
+Only `custom_components/sub2api` is required to install the integration. The
+`lovelace` and `automations` directories contain optional examples and are
+not loaded automatically.
 
-## 开发与验证
+## Development
 
-创建 Python 3.12 虚拟环境后：
+Create a Python 3.12 virtual environment, then run:
 
 ```bash
 python -m pip install -e ".[test]"
@@ -485,22 +550,27 @@ python -m ruff check .
 python -m ruff format --check .
 ```
 
-当前测试覆盖：
+The tests cover:
 
-- API 响应解析和异常响应
-- access token 过期与 refresh token 轮换
-- 配置、重复账号和重新认证流程
-- 每日及每周传感器创建
-- 新订阅和新额度窗口的动态发现
-- 订阅消失后的实体不可用状态
-- 认证失败后启动 Home Assistant 重新认证流程
+- API parsing and malformed responses
+- Access-token expiration and refresh-token rotation
+- Configuration, duplicate accounts, and reauthentication
+- Daily and weekly sensor creation
+- Dynamic discovery of subscriptions and quota windows
+- Unavailable entities for removed subscriptions
+- Home Assistant reauthentication after authentication failure
 
-GitHub Actions 会继续运行单元测试、`ruff`、HACS validation 和 hassfest。
+GitHub Actions also run the unit tests, Ruff, HACS validation, and hassfest.
 
-## 上游项目
+## Upstream project
 
-本项目依赖 sub2API 提供的用户订阅接口。sub2API 服务端和网页项目请参考：
+This integration depends on the user subscription endpoints provided by
+sub2API:
 
 - [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api)
 
-本仓库不是 sub2API 官方 Home Assistant 集成。
+This repository is not an official sub2API Home Assistant integration.
+
+---
+
+[Buy me a coffee](https://www.buymeacoffee.com/dreamxiaohai)
