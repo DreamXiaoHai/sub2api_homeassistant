@@ -69,6 +69,20 @@ async def test_client_reads_progress(progress_payload) -> None:
     assert subscriptions[42].weekly.limit_usd == 600.0
 
 
+async def test_client_reads_dashboard_stats(dashboard_payload) -> None:
+    with aioresponses() as mocked:
+        mocked.get(
+            "https://example.com/api/v1/usage/dashboard/stats",
+            payload=response(dashboard_payload),
+        )
+        async with make_test_session() as session:
+            client = Sub2APIClient(session, "https://example.com", "access", "refresh")
+            stats = await client.async_get_dashboard_stats()
+
+    assert stats.today_tokens == 3_000_000
+    assert stats.total_tokens == 395_900_000
+
+
 async def test_expired_access_token_is_refreshed_and_persisted(
     progress_payload,
 ) -> None:

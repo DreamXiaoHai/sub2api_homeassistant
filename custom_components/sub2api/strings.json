@@ -41,7 +41,9 @@
       "daily_reset": { "name": "Daily reset" },
       "weekly_used": { "name": "Weekly used" },
       "weekly_limit": { "name": "Weekly limit" },
-      "weekly_reset": { "name": "Weekly reset" }
+      "weekly_reset": { "name": "Weekly reset" },
+      "today_tokens": { "name": "Today tokens" },
+      "total_tokens": { "name": "Total tokens" }
     }
   }
 }

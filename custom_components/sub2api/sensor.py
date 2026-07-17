@@ -1,4 +1,4 @@
-"""Sensor platform for sub2API subscription quotas."""
+"""Sensor platform for sub2API quotas and token usage."""
 
 from __future__ import annotations
 
@@ -20,8 +20,11 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import site_identifier
 from .const import CONF_BASE_URL, CONF_USER_ID, DOMAIN, Sub2APIConfigEntry
-from .coordinator import Sub2APIDataUpdateCoordinator
-from .models import Subscription, UsageWindow
+from .coordinator import (
+    Sub2APIDataUpdateCoordinator,
+    Sub2APIUsageDataUpdateCoordinator,
+)
+from .models import DashboardStats, Subscription, UsageWindow
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -31,6 +34,13 @@ class Sub2APISensorDescription(SensorEntityDescription):
     window: str
     metric: str
     value_fn: Callable[[UsageWindow], Any]
+
+
+@dataclass(frozen=True, kw_only=True)
+class Sub2APIAccountSensorDescription(SensorEntityDescription):
+    """Describe an account-level sub2API token sensor."""
+
+    period: str
 
 
 SENSOR_DESCRIPTIONS = (
@@ -96,6 +106,27 @@ SENSOR_DESCRIPTIONS = (
     ),
 )
 
+ACCOUNT_SENSOR_DESCRIPTIONS = (
+    Sub2APIAccountSensorDescription(
+        key="today_tokens",
+        translation_key="today_tokens",
+        period="today",
+        native_unit_of_measurement="tokens",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=0,
+        icon="mdi:calendar-today",
+    ),
+    Sub2APIAccountSensorDescription(
+        key="total_tokens",
+        translation_key="total_tokens",
+        period="total",
+        native_unit_of_measurement="tokens",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=0,
+        icon="mdi:counter",
+    ),
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -105,7 +136,13 @@ async def async_setup_entry(
     """Set up sensors and discover new subscriptions after refreshes."""
 
     coordinator = entry.runtime_data.coordinator
+    usage_coordinator = entry.runtime_data.usage_coordinator
     known: set[tuple[int, str]] = set()
+
+    async_add_entities(
+        Sub2APIAccountTokenSensor(usage_coordinator, entry, description)
+        for description in ACCOUNT_SENSOR_DESCRIPTIONS
+    )
 
     @callback
     def async_add_missing_entities() -> None:
@@ -128,6 +165,66 @@ async def async_setup_entry(
 
     async_add_missing_entities()
     entry.async_on_unload(coordinator.async_add_listener(async_add_missing_entities))
+
+
+class Sub2APIAccountTokenSensor(
+    CoordinatorEntity[Sub2APIUsageDataUpdateCoordinator], SensorEntity
+):
+    """One account-level token total from the sub2API dashboard."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: Sub2APIUsageDataUpdateCoordinator,
+        entry: Sub2APIConfigEntry,
+        description: Sub2APIAccountSensorDescription,
+    ) -> None:
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._site_id = site_identifier(entry.data[CONF_BASE_URL])
+        self._user_id = entry.data[CONF_USER_ID]
+        self._base_url = entry.data[CONF_BASE_URL]
+        self._device_name = entry.title
+        self._attr_unique_id = f"{self._site_id}_{self._user_id}_{description.key}"
+
+    @property
+    def _stats(self) -> DashboardStats | None:
+        return self.coordinator.data
+
+    @property
+    def available(self) -> bool:
+        return super().available and self._stats is not None
+
+    @property
+    def native_value(self) -> int | None:
+        stats = self._stats
+        if stats is None:
+            return None
+        return getattr(stats, f"{self.entity_description.period}_tokens")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, int]:
+        stats = self._stats
+        if stats is None:
+            return {}
+        prefix = self.entity_description.period
+        return {
+            "input_tokens": getattr(stats, f"{prefix}_input_tokens"),
+            "output_tokens": getattr(stats, f"{prefix}_output_tokens"),
+            "cache_creation_tokens": getattr(stats, f"{prefix}_cache_creation_tokens"),
+            "cache_read_tokens": getattr(stats, f"{prefix}_cache_read_tokens"),
+        }
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, f"{self._site_id}_{self._user_id}_account")},
+            name=self._device_name,
+            manufacturer="sub2API",
+            model="User dashboard",
+            configuration_url=self._base_url,
+        )
 
 
 class Sub2APISubscriptionSensor(

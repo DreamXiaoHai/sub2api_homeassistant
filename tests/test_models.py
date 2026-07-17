@@ -8,6 +8,7 @@ import pytest
 
 from custom_components.sub2api.models import (
     Sub2APIModelError,
+    parse_dashboard_stats,
     parse_subscriptions,
 )
 
@@ -30,6 +31,43 @@ def test_parse_screenshot_quota_values(progress_payload) -> None:
     assert subscription.weekly.limit_usd == 600.0
     assert subscription.weekly.remaining_usd == 535.91
     assert subscription.weekly.resets_at == datetime(2026, 7, 21, tzinfo=UTC)
+
+
+def test_parse_screenshot_dashboard_tokens(dashboard_payload) -> None:
+    """Today and cumulative token totals match the supplied dashboard."""
+
+    stats = parse_dashboard_stats(dashboard_payload)
+
+    assert stats.today_tokens == 3_000_000
+    assert stats.today_input_tokens == 621_800
+    assert stats.today_output_tokens == 55_500
+    assert stats.total_tokens == 395_900_000
+    assert stats.total_input_tokens == 11_500_000
+    assert stats.total_output_tokens == 800_600
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"today_tokens": -1},
+        {
+            "today_input_tokens": "621800",
+            "today_output_tokens": 55_500,
+            "today_cache_creation_tokens": 22_700,
+            "today_cache_read_tokens": 2_300_000,
+            "today_tokens": 3_000_000,
+            "total_input_tokens": 11_500_000,
+            "total_output_tokens": 800_600,
+            "total_cache_creation_tokens": 3_599_400,
+            "total_cache_read_tokens": 380_000_000,
+            "total_tokens": 395_900_000,
+        },
+    ],
+)
+def test_malformed_dashboard_stats_are_rejected(payload) -> None:
+    with pytest.raises(Sub2APIModelError):
+        parse_dashboard_stats(payload)
 
 
 def test_limit_without_active_window_is_available(progress_payload) -> None:

@@ -11,6 +11,7 @@ Home Assistant，并以传感器、Lovelace 卡片和自动化通知的方式使
 - 每周已用金额和每周总额度
 - 每日、每周额度的下一次重置时间
 - 剩余额度和使用百分比
+- 今日 Token 和账号累计 Token
 - 多个有效订阅的独立状态
 
 > [!IMPORTANT]
@@ -36,10 +37,11 @@ Home Assistant，并以传感器、Lovelace 卡片和自动化通知的方式使
 
 ## 工作原理
 
-集成每 5 分钟调用一次 sub2API 的用户订阅接口：
+集成每 5 分钟调用一次 sub2API 的用户订阅和仪表盘统计接口：
 
 ```text
 GET /api/v1/subscriptions/progress
+GET /api/v1/usage/dashboard/stats
 ```
 
 Home Assistant 中的数据流如下：
@@ -49,7 +51,7 @@ sub2API 订阅接口
         ↓
 sub2API Subscription 集成
         ↓
-每日/每周传感器
+每日/每周额度和 Token 传感器
         ↓
 Lovelace 卡片、历史记录和自动化
 ```
@@ -217,7 +219,8 @@ https://sub2api.example.com/api/v1
 
 ## 认识生成的实体
 
-每个订阅最多创建 6 个传感器。没有配置相应额度的订阅不会创建该组实体。
+每个订阅最多创建 6 个额度传感器。没有配置相应额度的订阅不会创建该组实体。
+集成还会创建一个账号设备，其中包含 2 个 Token 传感器。
 
 | 传感器 | 内容 | 单位 | 主要属性 |
 |---|---|---|---|
@@ -227,6 +230,8 @@ https://sub2api.example.com/api/v1
 | 每周已用 | 当前每周窗口已使用金额 | USD | `remaining_usd`、`percentage`、`window_start` |
 | 每周总额 | 每周额度上限 | USD | 订阅和分组信息 |
 | 每周重置 | 每周窗口下一次重置时间 | 时间戳 | `resets_in_seconds` |
+| 今日 Token | 今天使用的 Token 总数 | tokens | 输入、输出、缓存创建和缓存读取 Token |
+| 累计 Token | 账号累计使用的 Token 总数 | tokens | 输入、输出、缓存创建和缓存读取 Token |
 
 实体 ID 由 Home Assistant 根据订阅名称生成，因此不同用户的实体 ID 不一定
 相同。仓库示例使用的 `sensor.codex_subscription_*` 只是占位符。
@@ -235,12 +240,22 @@ https://sub2api.example.com/api/v1
 
 1. 打开 **开发者工具** > **状态**。
 2. 搜索 `daily_used`、`daily_limit`、`daily_reset`、`weekly_used`、
-   `weekly_limit` 或 `weekly_reset`。
+   `weekly_limit`、`weekly_reset`、`today_tokens` 或 `total_tokens`。
 3. 也可以在 **设置** > **设备与服务** > **sub2API Subscription** 中打开
    对应订阅设备，查看它的全部实体。
 
 如果额度已经配置但窗口尚未激活，已用和总额仍可显示，重置时间会暂时显示
 为不可用。
+
+Token 传感器的主状态是 sub2API 返回的完整整数。Home Assistant 可以把大数
+显示成 `3.0M` 这样的紧凑形式。每个 Token 传感器还提供以下属性：
+
+```text
+input_tokens
+output_tokens
+cache_creation_tokens
+cache_read_tokens
+```
 
 ## 创建 Lovelace 仪表盘
 
@@ -268,6 +283,10 @@ entities:
     name: 每周总额
   - entity: sensor.codex_subscription_weekly_reset
     name: 每周重置
+  - entity: sensor.sub2api_account_today_tokens
+    name: 今日 Token
+  - entity: sensor.sub2api_account_total_tokens
+    name: 累计 Token
 ```
 
 ### 仿 sub2API 进度卡片
@@ -470,8 +489,8 @@ Assistant 刷新。如果原浏览器页面一直保持运行，它也可能在 
 
 ### 是否支持月额度或订阅到期时间实体
 
-当前 `0.1.0` 版本只创建每日和每周额度实体，暂不创建月额度、订阅状态或
-到期时间的独立实体。
+当前 `0.2.0` 版本创建每日和每周额度实体，以及今日和累计 Token 实体。
+暂不创建月额度、订阅状态或到期时间的独立实体。
 
 ### 是否可以添加多个账号或多个站点
 
@@ -526,6 +545,7 @@ python -m ruff format --check .
 - access token 过期与 refresh token 轮换
 - 配置、重复账号和重新认证流程
 - 每日及每周传感器创建
+- 今日及累计 Token 传感器和分项属性
 - 新订阅和新额度窗口的动态发现
 - 订阅消失后的实体不可用状态
 - 认证失败后启动 Home Assistant 重新认证流程

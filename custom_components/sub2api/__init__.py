@@ -14,7 +14,10 @@ from .const import (
     Sub2APIConfigEntry,
     Sub2APIRuntimeData,
 )
-from .coordinator import Sub2APIDataUpdateCoordinator
+from .coordinator import (
+    Sub2APIDataUpdateCoordinator,
+    Sub2APIUsageDataUpdateCoordinator,
+)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: Sub2APIConfigEntry) -> bool:
@@ -39,9 +42,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: Sub2APIConfigEntry) -> b
         async_update_tokens,
     )
     coordinator = Sub2APIDataUpdateCoordinator(hass, client, entry)
-    entry.runtime_data = Sub2APIRuntimeData(client, coordinator)
+    usage_coordinator = Sub2APIUsageDataUpdateCoordinator(hass, client, entry)
+    entry.runtime_data = Sub2APIRuntimeData(client, coordinator, usage_coordinator)
 
     await coordinator.async_config_entry_first_refresh()
+    await usage_coordinator.async_refresh()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 

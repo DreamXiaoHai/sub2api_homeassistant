@@ -41,7 +41,9 @@
       "daily_reset": { "name": "每日重置" },
       "weekly_used": { "name": "每周已用" },
       "weekly_limit": { "name": "每周总额" },
-      "weekly_reset": { "name": "每周重置" }
+      "weekly_reset": { "name": "每周重置" },
+      "today_tokens": { "name": "今日 Token" },
+      "total_tokens": { "name": "累计 Token" }
     }
   }
 }

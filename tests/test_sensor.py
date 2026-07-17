@@ -8,7 +8,7 @@ from homeassistant import config_entries
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.sub2api.api import Sub2APIAuthError
+from custom_components.sub2api.api import Sub2APIAuthError, Sub2APIConnectionError
 from custom_components.sub2api.const import (
     CONF_ACCESS_TOKEN,
     CONF_BASE_URL,
@@ -17,11 +17,14 @@ from custom_components.sub2api.const import (
     CONF_USERNAME,
     DOMAIN,
 )
-from custom_components.sub2api.models import parse_subscriptions
+from custom_components.sub2api.models import parse_dashboard_stats, parse_subscriptions
 
 
-async def test_six_sensors_and_dynamic_availability(hass, progress_payload) -> None:
+async def test_eight_sensors_and_dynamic_availability(
+    hass, progress_payload, dashboard_payload
+) -> None:
     subscriptions = parse_subscriptions(progress_payload)
+    dashboard_stats = parse_dashboard_stats(dashboard_payload)
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="sub2API tester",
@@ -42,6 +45,10 @@ async def test_six_sensors_and_dynamic_availability(hass, progress_payload) -> N
             AsyncMock(return_value=subscriptions),
         ),
         patch(
+            "custom_components.sub2api.api.Sub2APIClient.async_get_dashboard_stats",
+            AsyncMock(return_value=dashboard_stats),
+        ),
+        patch(
             "custom_components.sub2api.async_get_clientsession",
             return_value=MagicMock(),
         ),
@@ -51,7 +58,7 @@ async def test_six_sensors_and_dynamic_availability(hass, progress_payload) -> N
 
     registry = er.async_get(hass)
     entities = er.async_entries_for_config_entry(registry, entry.entry_id)
-    assert len(entities) == 6
+    assert len(entities) == 8
 
     used_entry = next(
         item for item in entities if item.unique_id.endswith("daily_used")
@@ -62,16 +69,38 @@ async def test_six_sensors_and_dynamic_availability(hass, progress_payload) -> N
     assert used_state.attributes["remaining_usd"] == 270.39
     assert used_state.attributes["percentage"] == 9.87
 
+    today_entry = next(
+        item for item in entities if item.unique_id.endswith("today_tokens")
+    )
+    today_state = hass.states.get(today_entry.entity_id)
+    assert today_state is not None
+    assert today_state.state == "3000000"
+    assert today_state.attributes["input_tokens"] == 621_800
+    assert today_state.attributes["output_tokens"] == 55_500
+    assert today_state.attributes["cache_read_tokens"] == 2_300_000
+
+    total_entry = next(
+        item for item in entities if item.unique_id.endswith("total_tokens")
+    )
+    total_state = hass.states.get(total_entry.entity_id)
+    assert total_state is not None
+    assert total_state.state == "395900000"
+    assert total_state.attributes["input_tokens"] == 11_500_000
+    assert total_state.attributes["output_tokens"] == 800_600
+
     coordinator = entry.runtime_data.coordinator
     coordinator.async_set_updated_data({})
     await hass.async_block_till_done()
     assert hass.states.get(used_entry.entity_id).state == "unavailable"
 
 
-async def test_new_weekly_window_adds_entities(hass, progress_payload) -> None:
+async def test_new_weekly_window_adds_entities(
+    hass, progress_payload, dashboard_payload
+) -> None:
     progress_payload[0]["progress"]["weekly"] = None
     progress_payload[0]["subscription"]["group"]["weekly_limit_usd"] = None
     daily_only = parse_subscriptions(progress_payload)
+    dashboard_stats = parse_dashboard_stats(dashboard_payload)
 
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -90,6 +119,10 @@ async def test_new_weekly_window_adds_entities(hass, progress_payload) -> None:
             AsyncMock(return_value=daily_only),
         ),
         patch(
+            "custom_components.sub2api.api.Sub2APIClient.async_get_dashboard_stats",
+            AsyncMock(return_value=dashboard_stats),
+        ),
+        patch(
             "custom_components.sub2api.async_get_clientsession",
             return_value=MagicMock(),
         ),
@@ -98,7 +131,7 @@ async def test_new_weekly_window_adds_entities(hass, progress_payload) -> None:
         await hass.async_block_till_done()
 
     registry = er.async_get(hass)
-    assert len(er.async_entries_for_config_entry(registry, entry.entry_id)) == 3
+    assert len(er.async_entries_for_config_entry(registry, entry.entry_id)) == 5
 
     progress_payload[0]["subscription"]["group"]["weekly_limit_usd"] = 600.0
     progress_payload[0]["progress"]["weekly"] = {
@@ -115,11 +148,61 @@ async def test_new_weekly_window_adds_entities(hass, progress_payload) -> None:
     )
     await hass.async_block_till_done()
 
-    assert len(er.async_entries_for_config_entry(registry, entry.entry_id)) == 6
+    assert len(er.async_entries_for_config_entry(registry, entry.entry_id)) == 8
 
 
-async def test_auth_failure_starts_reauthentication(hass, progress_payload) -> None:
+async def test_usage_failure_does_not_block_quota_sensors(
+    hass, progress_payload
+) -> None:
     subscriptions = parse_subscriptions(progress_payload)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="sub2API tester",
+        data={
+            CONF_BASE_URL: "https://example.com",
+            CONF_ACCESS_TOKEN: "access",
+            CONF_REFRESH_TOKEN: "refresh",
+            CONF_USER_ID: 7,
+            CONF_USERNAME: "tester",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    with (
+        patch(
+            "custom_components.sub2api.api.Sub2APIClient.async_get_subscriptions",
+            AsyncMock(return_value=subscriptions),
+        ),
+        patch(
+            "custom_components.sub2api.api.Sub2APIClient.async_get_dashboard_stats",
+            AsyncMock(side_effect=Sub2APIConnectionError("offline")),
+        ),
+        patch(
+            "custom_components.sub2api.async_get_clientsession",
+            return_value=MagicMock(),
+        ),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    entities = er.async_entries_for_config_entry(registry, entry.entry_id)
+    used_entry = next(
+        item for item in entities if item.unique_id.endswith("daily_used")
+    )
+    today_entry = next(
+        item for item in entities if item.unique_id.endswith("today_tokens")
+    )
+
+    assert hass.states.get(used_entry.entity_id).state == "29.61"
+    assert hass.states.get(today_entry.entity_id).state == "unavailable"
+
+
+async def test_auth_failure_starts_reauthentication(
+    hass, progress_payload, dashboard_payload
+) -> None:
+    subscriptions = parse_subscriptions(progress_payload)
+    dashboard_stats = parse_dashboard_stats(dashboard_payload)
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -135,6 +218,10 @@ async def test_auth_failure_starts_reauthentication(hass, progress_payload) -> N
         patch(
             "custom_components.sub2api.api.Sub2APIClient.async_get_subscriptions",
             AsyncMock(return_value=subscriptions),
+        ),
+        patch(
+            "custom_components.sub2api.api.Sub2APIClient.async_get_dashboard_stats",
+            AsyncMock(return_value=dashboard_stats),
         ),
         patch(
             "custom_components.sub2api.async_get_clientsession",

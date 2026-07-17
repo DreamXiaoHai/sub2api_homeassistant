@@ -12,6 +12,7 @@ This integration exposes:
 - Weekly usage and weekly quota
 - The next daily and weekly reset times
 - Remaining quota and usage percentage
+- Today's and cumulative token usage
 - Separate devices and sensors for multiple active subscriptions
 
 > [!IMPORTANT]
@@ -39,10 +40,11 @@ This integration exposes:
 ## How it works
 
 Every five minutes, the integration calls the authenticated sub2API
-subscription endpoint:
+subscription and dashboard endpoints:
 
 ```text
 GET /api/v1/subscriptions/progress
+GET /api/v1/usage/dashboard/stats
 ```
 
 The data flow is:
@@ -54,7 +56,7 @@ sub2API subscription endpoint
 sub2API Subscription integration
               |
               v
-Daily and weekly sensors
+Daily, weekly, and token sensors
               |
               v
 Lovelace cards, history, and automations
@@ -230,8 +232,9 @@ site cannot be added twice.
 
 ## Entities
 
-Each subscription creates up to six sensors. A group is omitted when that
-subscription has no corresponding quota window.
+Each subscription creates up to six quota sensors. A group is omitted when
+that subscription has no corresponding quota window. The integration also
+creates an account device containing two token sensors.
 
 | Sensor | State | Unit | Main attributes |
 |---|---|---|---|
@@ -241,6 +244,8 @@ subscription has no corresponding quota window.
 | Weekly used | Amount used in the current weekly window | USD | `remaining_usd`, `percentage`, `window_start` |
 | Weekly limit | Weekly quota limit | USD | Subscription and group information |
 | Weekly reset | Next weekly reset | Timestamp | `resets_in_seconds` |
+| Today tokens | Tokens used today | tokens | Input, output, cache creation, and cache read tokens |
+| Total tokens | Cumulative tokens used by the account | tokens | Input, output, cache creation, and cache read tokens |
 
 Home Assistant generates entity IDs from subscription names, so IDs differ
 between installations. The `sensor.codex_subscription_*` IDs in this
@@ -250,12 +255,24 @@ To find the actual IDs:
 
 1. Open **Developer tools** > **States**.
 2. Search for `daily_used`, `daily_limit`, `daily_reset`,
-   `weekly_used`, `weekly_limit`, or `weekly_reset`.
+   `weekly_used`, `weekly_limit`, `weekly_reset`, `today_tokens`, or
+   `total_tokens`.
 3. Alternatively, open the subscription device under **Settings** >
    **Devices & services** > **sub2API Subscription**.
 
 If a quota exists but its window has not started, the used and limit sensors
 can still have values while the reset sensor is temporarily unavailable.
+
+The main state of each token sensor is the unformatted integer returned by
+sub2API. Home Assistant can display large values in a compact form such as
+`3.0M`. The following attributes are also available:
+
+```text
+input_tokens
+output_tokens
+cache_creation_tokens
+cache_read_tokens
+```
 
 ## Creating a Lovelace dashboard card
 
@@ -283,6 +300,10 @@ entities:
     name: Weekly limit
   - entity: sensor.codex_subscription_weekly_reset
     name: Weekly reset
+  - entity: sensor.sub2api_account_today_tokens
+    name: Today tokens
+  - entity: sensor.sub2api_account_total_tokens
+    name: Total tokens
 ```
 
 ### sub2API-style progress card
@@ -496,9 +517,9 @@ and reset time after the subscription first records usage.
 
 ### Are monthly quotas or subscription-expiration entities supported?
 
-Version `0.1.0` creates only daily and weekly quota entities. Monthly quota,
-subscription status, and expiration-time entities are not currently exposed
-as separate sensors.
+Version `0.2.0` creates daily and weekly quota entities plus today's and
+cumulative token entities. Monthly quota, subscription status, and
+expiration-time entities are not currently exposed as separate sensors.
 
 ### Can multiple accounts or sites be added?
 
@@ -556,6 +577,7 @@ The tests cover:
 - Access-token expiration and refresh-token rotation
 - Configuration, duplicate accounts, and reauthentication
 - Daily and weekly sensor creation
+- Today and cumulative token sensors and component attributes
 - Dynamic discovery of subscriptions and quota windows
 - Unavailable entities for removed subscriptions
 - Home Assistant reauthentication after authentication failure

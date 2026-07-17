@@ -47,6 +47,22 @@ class Subscription:
     weekly: UsageWindow | None
 
 
+@dataclass(frozen=True, slots=True)
+class DashboardStats:
+    """Token usage totals shown on the sub2API user dashboard."""
+
+    today_input_tokens: int
+    today_output_tokens: int
+    today_cache_creation_tokens: int
+    today_cache_read_tokens: int
+    today_tokens: int
+    total_input_tokens: int
+    total_output_tokens: int
+    total_cache_creation_tokens: int
+    total_cache_read_tokens: int
+    total_tokens: int
+
+
 def parse_user(payload: Any) -> UserInfo:
     """Parse the data object returned by /auth/me."""
 
@@ -55,6 +71,48 @@ def parse_user(payload: Any) -> UserInfo:
         user_id=_integer(data.get("id"), "user.id"),
         username=_text(data.get("username")),
         email=_text(data.get("email")),
+    )
+
+
+def parse_dashboard_stats(payload: Any) -> DashboardStats:
+    """Parse the token totals returned by /usage/dashboard/stats."""
+
+    data = _mapping(payload, "dashboard stats")
+    return DashboardStats(
+        today_input_tokens=_nonnegative_integer(
+            data.get("today_input_tokens"), "dashboard_stats.today_input_tokens"
+        ),
+        today_output_tokens=_nonnegative_integer(
+            data.get("today_output_tokens"), "dashboard_stats.today_output_tokens"
+        ),
+        today_cache_creation_tokens=_nonnegative_integer(
+            data.get("today_cache_creation_tokens"),
+            "dashboard_stats.today_cache_creation_tokens",
+        ),
+        today_cache_read_tokens=_nonnegative_integer(
+            data.get("today_cache_read_tokens"),
+            "dashboard_stats.today_cache_read_tokens",
+        ),
+        today_tokens=_nonnegative_integer(
+            data.get("today_tokens"), "dashboard_stats.today_tokens"
+        ),
+        total_input_tokens=_nonnegative_integer(
+            data.get("total_input_tokens"), "dashboard_stats.total_input_tokens"
+        ),
+        total_output_tokens=_nonnegative_integer(
+            data.get("total_output_tokens"), "dashboard_stats.total_output_tokens"
+        ),
+        total_cache_creation_tokens=_nonnegative_integer(
+            data.get("total_cache_creation_tokens"),
+            "dashboard_stats.total_cache_creation_tokens",
+        ),
+        total_cache_read_tokens=_nonnegative_integer(
+            data.get("total_cache_read_tokens"),
+            "dashboard_stats.total_cache_read_tokens",
+        ),
+        total_tokens=_nonnegative_integer(
+            data.get("total_tokens"), "dashboard_stats.total_tokens"
+        ),
     )
 
 
@@ -183,6 +241,13 @@ def _integer(value: Any, field: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise Sub2APIModelError(f"{field} must be an integer")
     return value
+
+
+def _nonnegative_integer(value: Any, field: str) -> int:
+    parsed = _integer(value, field)
+    if parsed < 0:
+        raise Sub2APIModelError(f"{field} must not be negative")
+    return parsed
 
 
 def _integer_or_none(value: Any, field: str) -> int | None:

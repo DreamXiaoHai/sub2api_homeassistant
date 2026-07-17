@@ -11,7 +11,10 @@ from homeassistant.const import Platform
 
 if TYPE_CHECKING:
     from .api import Sub2APIClient
-    from .coordinator import Sub2APIDataUpdateCoordinator
+    from .coordinator import (
+        Sub2APIDataUpdateCoordinator,
+        Sub2APIUsageDataUpdateCoordinator,
+    )
 
 DOMAIN = "sub2api"
 PLATFORMS = (Platform.SENSOR,)
@@ -31,6 +34,7 @@ class Sub2APIRuntimeData:
 
     client: Sub2APIClient
     coordinator: Sub2APIDataUpdateCoordinator
+    usage_coordinator: Sub2APIUsageDataUpdateCoordinator
 
 
 type Sub2APIConfigEntry = ConfigEntry[Sub2APIRuntimeData]

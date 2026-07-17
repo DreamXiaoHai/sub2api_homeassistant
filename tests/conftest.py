@@ -80,3 +80,21 @@ def progress_payload() -> list[dict[str, Any]]:
             },
         }
     ]
+
+
+@pytest.fixture
+def dashboard_payload() -> dict[str, Any]:
+    """Return representative /usage/dashboard/stats token totals."""
+
+    return {
+        "today_input_tokens": 621_800,
+        "today_output_tokens": 55_500,
+        "today_cache_creation_tokens": 22_700,
+        "today_cache_read_tokens": 2_300_000,
+        "today_tokens": 3_000_000,
+        "total_input_tokens": 11_500_000,
+        "total_output_tokens": 800_600,
+        "total_cache_creation_tokens": 3_599_400,
+        "total_cache_read_tokens": 380_000_000,
+        "total_tokens": 395_900_000,
+    }

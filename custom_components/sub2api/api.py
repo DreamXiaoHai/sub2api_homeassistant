@@ -11,8 +11,10 @@ from urllib.parse import urlsplit, urlunsplit
 from aiohttp import ClientError, ClientResponse, ClientSession, ClientTimeout
 
 from .models import (
+    DashboardStats,
     Subscription,
     UserInfo,
+    parse_dashboard_stats,
     parse_subscriptions,
     parse_user,
 )
@@ -104,6 +106,13 @@ class Sub2APIClient:
 
         return parse_subscriptions(
             await self._async_authenticated_get("/subscriptions/progress")
+        )
+
+    async def async_get_dashboard_stats(self) -> DashboardStats:
+        """Return token usage totals for the current user."""
+
+        return parse_dashboard_stats(
+            await self._async_authenticated_get("/usage/dashboard/stats")
         )
 
     async def _async_authenticated_get(self, path: str) -> Any:
