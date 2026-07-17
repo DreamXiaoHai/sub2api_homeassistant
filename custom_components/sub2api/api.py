@@ -11,10 +11,14 @@ from urllib.parse import urlsplit, urlunsplit
 from aiohttp import ClientError, ClientResponse, ClientSession, ClientTimeout
 
 from .models import (
+    AuthTokens,
     DashboardStats,
     Subscription,
+    TotpChallenge,
     UserInfo,
+    parse_auth_tokens,
     parse_dashboard_stats,
+    parse_login_result,
     parse_subscriptions,
     parse_user,
 )
@@ -28,6 +32,14 @@ class Sub2APIError(Exception):
 
 class Sub2APIAuthError(Sub2APIError):
     """Authentication or token refresh failed."""
+
+
+class Sub2APICredentialsError(Sub2APIAuthError):
+    """Email, password, TOTP, or interactive verification was rejected."""
+
+
+class Sub2APITotpRequired(Sub2APIAuthError):
+    """Automatic login requires a current TOTP code."""
 
 
 class Sub2APIConnectionError(Sub2APIError):
@@ -88,13 +100,19 @@ class Sub2APIClient:
         access_token: str,
         refresh_token: str,
         token_update_callback: TokenUpdateCallback | None = None,
+        *,
+        email: str = "",
+        password: str = "",
     ) -> None:
         self._session = session
         self.base_url = normalize_base_url(base_url)
         self.access_token = access_token.strip()
         self.refresh_token = refresh_token.strip()
+        self.email = email.strip()
+        self.password = password
         self._token_update_callback = token_update_callback
         self._refresh_lock = asyncio.Lock()
+        self._totp_required = False
 
     async def async_get_user(self) -> UserInfo:
         """Return the currently authenticated user."""
@@ -115,6 +133,36 @@ class Sub2APIClient:
             await self._async_authenticated_get("/usage/dashboard/stats")
         )
 
+    async def async_login(self, email: str, password: str) -> TotpChallenge | None:
+        """Sign in with credentials and return a pending TOTP challenge if needed."""
+
+        normalized_email = email.strip()
+        response = await self._async_request(
+            "POST",
+            "/auth/login",
+            json={"email": normalized_email, "password": password},
+        )
+        data = await self._async_unwrap_credentials_response(response)
+        result = parse_login_result(data)
+        self.email = normalized_email
+        self.password = password
+        if isinstance(result, TotpChallenge):
+            self._totp_required = True
+            return result
+        self._apply_tokens(result)
+        return None
+
+    async def async_complete_totp(self, temp_token: str, code: str) -> None:
+        """Complete a pending credential login with a current TOTP code."""
+
+        response = await self._async_request(
+            "POST",
+            "/auth/login/2fa",
+            json={"temp_token": temp_token, "totp_code": code.strip()},
+        )
+        data = await self._async_unwrap_credentials_response(response)
+        self._apply_tokens(parse_auth_tokens(data))
+
     async def _async_authenticated_get(self, path: str) -> Any:
         token_used = self.access_token
         response = await self._async_request(
@@ -128,7 +176,18 @@ class Sub2APIClient:
         response.release()
         async with self._refresh_lock:
             if token_used == self.access_token:
-                await self._async_refresh_tokens()
+                if self._totp_required:
+                    raise Sub2APITotpRequired("two-factor authentication is required")
+                try:
+                    await self._async_refresh_tokens()
+                except Sub2APIAuthError as refresh_err:
+                    if not self.email or not self.password:
+                        raise
+                    challenge = await self.async_login(self.email, self.password)
+                    if challenge is not None:
+                        raise Sub2APITotpRequired(
+                            "two-factor authentication is required"
+                        ) from refresh_err
 
         retry = await self._async_request(
             "GET",
@@ -156,17 +215,29 @@ class Sub2APIClient:
         data = await self._async_unwrap(response)
         if not isinstance(data, dict):
             raise Sub2APIAuthError("token refresh response is invalid")
-        access_token = data.get("access_token")
-        refresh_token = data.get("refresh_token")
-        if not isinstance(access_token, str) or not access_token.strip():
-            raise Sub2APIAuthError("token refresh response has no access token")
-        if not isinstance(refresh_token, str) or not refresh_token.strip():
-            raise Sub2APIAuthError("token refresh response has no refresh token")
+        try:
+            tokens = parse_auth_tokens(data)
+        except ValueError as err:
+            raise Sub2APIAuthError("token refresh response is invalid") from err
+        self._apply_tokens(tokens)
 
-        self.access_token = access_token.strip()
-        self.refresh_token = refresh_token.strip()
+    def _apply_tokens(self, tokens: AuthTokens) -> None:
+        self.access_token = tokens.access_token
+        self.refresh_token = tokens.refresh_token
+        self._totp_required = False
         if self._token_update_callback is not None:
             self._token_update_callback(self.access_token, self.refresh_token)
+
+    async def _async_unwrap_credentials_response(self, response: ClientResponse) -> Any:
+        if response.status in (400, 401, 403):
+            response.release()
+            raise Sub2APICredentialsError("credential login was rejected")
+        try:
+            return await self._async_unwrap(response)
+        except Sub2APIResponseError as err:
+            if err.status == 200:
+                raise Sub2APICredentialsError("credential login was rejected") from err
+            raise
 
     async def _async_request(
         self, method: str, path: str, **kwargs: Any

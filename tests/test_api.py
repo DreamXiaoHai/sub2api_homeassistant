@@ -11,7 +11,9 @@ from custom_components.sub2api.api import (
     Sub2APIAuthError,
     Sub2APIClient,
     Sub2APIConnectionError,
+    Sub2APICredentialsError,
     Sub2APIResponseError,
+    Sub2APITotpRequired,
     normalize_base_url,
 )
 
@@ -83,6 +85,78 @@ async def test_client_reads_dashboard_stats(dashboard_payload) -> None:
     assert stats.total_tokens == 395_900_000
 
 
+async def test_password_login_saves_returned_tokens() -> None:
+    updates: list[tuple[str, str]] = []
+    with aioresponses() as mocked:
+        mocked.post(
+            "https://example.com/api/v1/auth/login",
+            payload=response(
+                {
+                    "access_token": "login-access",
+                    "refresh_token": "login-refresh",
+                    "expires_in": 7200,
+                }
+            ),
+        )
+        async with make_test_session() as session:
+            client = Sub2APIClient(
+                session,
+                "https://example.com",
+                "",
+                "",
+                lambda access, refresh: updates.append((access, refresh)),
+            )
+            challenge = await client.async_login("user@example.com", "secret-password")
+
+    assert challenge is None
+    assert client.access_token == "login-access"
+    assert client.refresh_token == "login-refresh"
+    assert client.email == "user@example.com"
+    assert client.password == "secret-password"
+    assert updates == [("login-access", "login-refresh")]
+
+
+async def test_password_login_can_complete_totp() -> None:
+    with aioresponses() as mocked:
+        mocked.post(
+            "https://example.com/api/v1/auth/login",
+            payload=response(
+                {
+                    "requires_2fa": True,
+                    "temp_token": "temporary-login",
+                    "user_email_masked": "u***@example.com",
+                }
+            ),
+        )
+        mocked.post(
+            "https://example.com/api/v1/auth/login/2fa",
+            payload=response(
+                {
+                    "access_token": "totp-access",
+                    "refresh_token": "totp-refresh",
+                    "expires_in": 7200,
+                }
+            ),
+        )
+        async with make_test_session() as session:
+            client = Sub2APIClient(session, "https://example.com", "", "")
+            challenge = await client.async_login("user@example.com", "secret-password")
+            assert challenge is not None
+            await client.async_complete_totp(challenge.temp_token, "123456")
+
+    assert client.access_token == "totp-access"
+    assert client.refresh_token == "totp-refresh"
+
+
+async def test_password_login_rejects_interactive_auth_response() -> None:
+    with aioresponses() as mocked:
+        mocked.post("https://example.com/api/v1/auth/login", status=403)
+        async with make_test_session() as session:
+            client = Sub2APIClient(session, "https://example.com", "", "")
+            with pytest.raises(Sub2APICredentialsError):
+                await client.async_login("user@example.com", "secret-password")
+
+
 async def test_expired_access_token_is_refreshed_and_persisted(
     progress_payload,
 ) -> None:
@@ -112,6 +186,97 @@ async def test_expired_access_token_is_refreshed_and_persisted(
     assert client.access_token == "new-access"
     assert client.refresh_token == "new-refresh"
     assert updates == [("new-access", "new-refresh")]
+
+
+async def test_rejected_refresh_token_falls_back_to_password_login(
+    progress_payload,
+) -> None:
+    with aioresponses() as mocked:
+        progress_url = "https://example.com/api/v1/subscriptions/progress"
+        mocked.get(progress_url, status=401)
+        mocked.post("https://example.com/api/v1/auth/refresh", status=401)
+        mocked.post(
+            "https://example.com/api/v1/auth/login",
+            payload=response(
+                {
+                    "access_token": "login-access",
+                    "refresh_token": "login-refresh",
+                    "expires_in": 7200,
+                }
+            ),
+        )
+        mocked.get(progress_url, payload=response(progress_payload))
+
+        async with make_test_session() as session:
+            client = Sub2APIClient(
+                session,
+                "https://example.com",
+                "expired-access",
+                "rejected-refresh",
+                email="user@example.com",
+                password="secret-password",
+            )
+            subscriptions = await client.async_get_subscriptions()
+
+    assert subscriptions[42].daily.used_usd == 29.61
+    assert client.access_token == "login-access"
+    assert client.refresh_token == "login-refresh"
+
+
+async def test_password_fallback_raises_when_totp_is_required() -> None:
+    with aioresponses() as mocked:
+        mocked.get("https://example.com/api/v1/auth/me", status=401)
+        mocked.get("https://example.com/api/v1/auth/me", status=401)
+        mocked.post("https://example.com/api/v1/auth/refresh", status=401)
+        mocked.post(
+            "https://example.com/api/v1/auth/login",
+            payload=response(
+                {
+                    "requires_2fa": True,
+                    "temp_token": "temporary-login",
+                    "user_email_masked": "u***@example.com",
+                }
+            ),
+        )
+
+        async with make_test_session() as session:
+            client = Sub2APIClient(
+                session,
+                "https://example.com",
+                "expired-access",
+                "rejected-refresh",
+                email="user@example.com",
+                password="secret-password",
+            )
+            with pytest.raises(Sub2APITotpRequired):
+                await client.async_get_user()
+            with pytest.raises(Sub2APITotpRequired):
+                await client.async_get_user()
+
+
+@pytest.mark.parametrize("status", [429, 500])
+async def test_refresh_server_errors_do_not_trigger_password_login(status) -> None:
+    with aioresponses() as mocked:
+        mocked.get("https://example.com/api/v1/auth/me", status=401)
+        mocked.post(
+            "https://example.com/api/v1/auth/refresh",
+            status=status,
+            payload={"code": 1, "message": "temporary failure", "data": None},
+        )
+
+        async with make_test_session() as session:
+            client = Sub2APIClient(
+                session,
+                "https://example.com",
+                "expired-access",
+                "refresh",
+                email="user@example.com",
+                password="secret-password",
+            )
+            with pytest.raises(Sub2APIResponseError) as caught:
+                await client.async_get_user()
+
+    assert caught.value.status == status
 
 
 async def test_rejected_refresh_token_raises_auth_error() -> None:

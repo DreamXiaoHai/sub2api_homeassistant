@@ -19,8 +19,14 @@ if TYPE_CHECKING:
 DOMAIN = "sub2api"
 PLATFORMS = (Platform.SENSOR,)
 
+AUTH_METHOD_CREDENTIALS = "credentials"
+AUTH_METHOD_TOKEN = "token"
+
 CONF_ACCESS_TOKEN = "access_token"
+CONF_AUTH_METHOD = "auth_method"
 CONF_BASE_URL = "base_url"
+CONF_EMAIL = "email"
+CONF_PASSWORD = "password"
 CONF_REFRESH_TOKEN = "refresh_token"
 CONF_USER_ID = "user_id"
 CONF_USERNAME = "username"

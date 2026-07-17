@@ -15,16 +15,16 @@ Home Assistant，并以传感器、Lovelace 卡片和自动化通知的方式使
 - 多个有效订阅的独立状态
 
 > [!IMPORTANT]
-> 本集成使用 sub2API 网页登录会话的 `auth_token` 和 `refresh_token`。
-> 模型调用使用的 API Key 无法访问订阅接口。不要把令牌提交到 GitHub、
-> 发送到聊天或写入公开日志。
+> 本集成支持邮箱密码登录，也支持手动填写网页会话令牌。模型调用使用的 API
+> Key 无法访问这些接口。不要把密码或令牌提交到 GitHub、发送到聊天或写入
+> 公开日志。
 
 ## 目录
 
 - [工作原理](#工作原理)
 - [安装前准备](#安装前准备)
 - [安装集成](#安装集成)
-- [获取 sub2API 令牌](#获取-sub2api-令牌)
+- [选择认证方式](#选择认证方式)
 - [在 Home Assistant 中添加集成](#在-home-assistant-中添加集成)
 - [认识生成的实体](#认识生成的实体)
 - [创建 Lovelace 仪表盘](#创建-lovelace-仪表盘)
@@ -155,12 +155,29 @@ custom_components/sub2api
 > `/config/custom_components/sub2api/manifest.json`，而不是
 > `/config/custom_components/sub2api/custom_components/sub2api/manifest.json`。
 
-## 获取 sub2API 令牌
+## 选择认证方式
 
-推荐从已经登录的 sub2API 网页读取令牌，这种方式兼容第三方站点的验证码、
-Turnstile 和双因素认证。
+### 邮箱和密码
 
-以 Chrome 或 Edge 为例：
+普通的 sub2API 本地账号推荐使用这种方式。Home Assistant 通过
+`POST /api/v1/auth/login` 登录，保存邮箱、密码以及服务器返回的两个
+Token，日常运行仍然使用 refresh token 自动续期。
+
+如果账号启用了 TOTP 二步认证，配置过程中会要求输入当前六位身份验证器
+代码。验证码和临时二步认证会话只使用一次，绝不会保存。以后重新登录再次
+需要 TOTP 时，Home Assistant 会发起重新认证，请求新的六位代码。
+
+为了在 refresh token 被拒绝时自动恢复，邮箱和密码会保存在 Home Assistant
+配置项存储中。该存储不是专用的加密密码保险库，只有在你信任 HA 主机和备份
+安全性的情况下才应选择这种模式。
+
+密码登录无法自动完成 Cloudflare Turnstile、OAuth、CAPTCHA 或其他浏览器
+交互式验证。这些站点应选择手动令牌。
+
+### 手动令牌
+
+手动令牌适用于 Turnstile、OAuth、CAPTCHA 或其他复杂认证结构。以 Chrome
+或 Edge 为例：
 
 1. 在浏览器中登录目标 sub2API 站点。
 2. 按 `F12` 打开开发者工具。
@@ -172,21 +189,18 @@ Turnstile 和双因素认证。
 
 Firefox 中对应的位置是 **Storage（存储）** > **Local Storage**。
 
-请注意：
-
-- 复制的是字段的值，不要把字段名一起复制。
-- 不要使用以模型调用为目的的 API Key。
-- 两个令牌必须来自同一个 sub2API 站点和同一个账号。
-- 建议使用专门的无痕窗口获取令牌。Home Assistant 配置完成后直接关闭窗口，
-  但不要在该窗口中点击退出登录。
-- 不要让浏览器和 Home Assistant 长期共用同一个 refresh token。sub2API 会
-  轮换 refresh token，先执行刷新的客户端会使另一个客户端保存的旧令牌失效。
+- 只复制字段值，不要把字段名一起复制。
+- 不要使用模型调用 API Key。
+- 两个令牌必须来自同一个站点和账号。
+- 建议使用专门的无痕窗口；配置完成后直接关闭窗口，但不要点击退出登录。
+- 不要让其他浏览器继续使用同一个 refresh token。sub2API 会轮换令牌，先
+  刷新的客户端会使另一个客户端保存的副本失效。
 
 > [!WARNING]
-> 当前版本的 sub2API 默认启用会话 IP 和 User-Agent 绑定。从浏览器取得的
-> 令牌，可能在另一台机器上的 Home Assistant 尝试刷新时被拒绝。如果你是
-> sub2API 站点管理员，需要为这种用法关闭会话 IP/UA 绑定，或者为 Home
-> Assistant 提供在兼容环境中签发的独立会话。
+> 当前 sub2API 默认启用会话 IP 和 User-Agent 绑定。浏览器生成的令牌可能
+> 在另一台机器上的 Home Assistant 刷新时被拒绝。邮箱密码模式直接从 HA
+> 创建会话，可以避免这种不匹配；手动令牌模式可能需要站点管理员关闭会话
+> IP/UA 绑定。
 
 ## 在 Home Assistant 中添加集成
 
@@ -196,9 +210,10 @@ Firefox 中对应的位置是 **Storage（存储）** > **Local Storage**。
 2. 点击 **添加集成**。
 3. 搜索 **sub2API Subscription**。
 4. 填写 sub2API 站点地址。
-5. 粘贴 access token，即网页中的 `auth_token`。
-6. 粘贴 refresh token。
-7. 提交配置。
+5. 选择 **邮箱和密码** 或 **手动填写访问令牌和刷新令牌**。
+6. 输入对应的登录信息或令牌。
+7. 如果出现提示，输入当前六位 TOTP 代码。
+8. 提交配置。
 
 站点地址推荐填写根地址：
 
@@ -216,6 +231,10 @@ https://sub2api.example.com/api/v1
 
 配置成功后，可以在集成页面看到账号和自动发现的订阅设备。同一个站点的
 不同用户可以分别添加；同一站点的同一用户不能重复添加。
+
+以后需要切换认证方式时，打开 **设置** > **设备与服务**，进入 sub2API
+配置项菜单并选择 **重新配置**。替换后的登录信息或令牌必须解析为同一个
+用户 ID。
 
 ## 认识生成的实体
 
@@ -383,6 +402,15 @@ sub2API 默认配置通常是：
 access token 请求收到 HTTP 401 后，集成会自动使用 refresh token 获取并
 保存一对轮换后的新令牌，然后重试原请求。
 
+在邮箱密码模式中，如果 refresh token 被 sub2API 明确拒绝，集成只会尝试
+一次密码登录：
+
+- 未启用 TOTP 时，自动保存服务器签发的新 Token。
+- 启用 TOTP 时，Home Assistant 会请求当前六位验证码。
+- 密码错误或站点要求浏览器交互验证时进入重新认证，可以切换为手动令牌。
+
+网络故障、限流和服务器错误绝不会触发密码重登。
+
 以下情况可能触发 Home Assistant 的“需要重新认证”：
 
 - refresh token 已过期或被撤销
@@ -394,9 +422,8 @@ access token 请求收到 HTTP 401 后，集成会自动使用 refresh token 获
 - sub2API 服务重启时清空了 refresh token 缓存
 - 站点修改了登录或安全策略
 
-看到重新认证提示后，重新登录 sub2API 网页，获取新的 `auth_token` 和
-`refresh_token`，然后在 Home Assistant 提示中粘贴即可。集成不会要求保存
-sub2API 邮箱或密码。
+重新认证或用户主动打开 **重新配置** 时都可以切换认证方式。Home Assistant
+会验证新登录信息或令牌仍属于原来的 sub2API 用户，然后才替换已保存的配置。
 
 ## 更新和卸载
 
@@ -441,6 +468,13 @@ Python 文件。替换后重启 Home Assistant。
 - 不要填写模型 API Key。
 - 检查 sub2API 站点是否启用了会话 IP/User-Agent 绑定。
 - 不要让浏览器和 Home Assistant 共用同一个轮换中的 refresh token。
+
+### 邮箱密码登录被拒绝
+
+- 登录名必须填写账号邮箱，而不是显示名称。
+- 在 sub2API 网页中验证密码是否正确。
+- 如果网页显示 Turnstile、CAPTCHA、OAuth 或其他交互验证，请改用手动令牌。
+- 如果启用了 TOTP，请在提示时输入当前六位验证码。
 
 ### 集成一直正常，但 access token 到期后就报错
 
@@ -489,7 +523,7 @@ Assistant 刷新。如果原浏览器页面一直保持运行，它也可能在 
 
 ### 是否支持月额度或订阅到期时间实体
 
-当前 `0.2.0` 版本创建每日和每周额度实体，以及今日和累计 Token 实体。
+当前 `0.3.0` 版本创建每日和每周额度实体，以及今日和累计 Token 实体。
 暂不创建月额度、订阅状态或到期时间的独立实体。
 
 ### 是否可以添加多个账号或多个站点
@@ -500,8 +534,11 @@ Assistant 刷新。如果原浏览器页面一直保持运行，它也可能在 
 ## 数据与安全
 
 - 访问令牌和刷新令牌保存在 Home Assistant 配置项存储中。
-- 令牌输入框使用密码类型，集成不会把令牌写入日志。
-- 集成不保存 sub2API 邮箱或密码。
+- 选择账号密码模式时，邮箱和密码也会保存在配置项中。
+- 密码、令牌和 TOTP 输入框使用密码类型，集成不会主动把它们写入日志。
+- TOTP 验证码、TOTP 密钥和临时二步认证会话绝不会保存。
+- Home Assistant 配置项不是专用的加密密码保险库，请保护 HA 主机以及包含
+  `/config/.storage` 的全部备份。
 - 只接受 HTTPS 地址，避免通过明文 HTTP 传输令牌。
 - 金额单位保持为 sub2API 返回的 USD。
 - 仓库中的 URL、实体 ID、用户名和通知服务均为示例值。
@@ -543,7 +580,8 @@ python -m ruff format --check .
 
 - API 响应解析和异常响应
 - access token 过期与 refresh token 轮换
-- 配置、重复账号和重新认证流程
+- 密码登录、手动令牌、TOTP 和刷新失败回退
+- 配置迁移、重复账号和重新认证流程
 - 每日及每周传感器创建
 - 今日及累计 Token 传感器和分项属性
 - 新订阅和新额度窗口的动态发现

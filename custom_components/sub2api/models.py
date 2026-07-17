@@ -21,6 +21,25 @@ class UserInfo:
 
 
 @dataclass(frozen=True, slots=True)
+class AuthTokens:
+    """A rotating sub2API access and refresh token pair."""
+
+    access_token: str
+    refresh_token: str
+
+
+@dataclass(frozen=True, slots=True)
+class TotpChallenge:
+    """A pending sub2API two-factor login challenge."""
+
+    temp_token: str
+    user_email_masked: str
+
+
+type LoginResult = AuthTokens | TotpChallenge
+
+
+@dataclass(frozen=True, slots=True)
 class UsageWindow:
     """Quota usage for one rolling window."""
 
@@ -72,6 +91,32 @@ def parse_user(payload: Any) -> UserInfo:
         username=_text(data.get("username")),
         email=_text(data.get("email")),
     )
+
+
+def parse_auth_tokens(payload: Any) -> AuthTokens:
+    """Parse a token pair returned by login, 2FA, or refresh."""
+
+    data = _mapping(payload, "authentication")
+    return AuthTokens(
+        access_token=_required_text(
+            data.get("access_token"), "authentication.access_token"
+        ),
+        refresh_token=_required_text(
+            data.get("refresh_token"), "authentication.refresh_token"
+        ),
+    )
+
+
+def parse_login_result(payload: Any) -> LoginResult:
+    """Parse a password login response, including an optional TOTP challenge."""
+
+    data = _mapping(payload, "login")
+    if data.get("requires_2fa") is True:
+        return TotpChallenge(
+            temp_token=_required_text(data.get("temp_token"), "login.temp_token"),
+            user_email_masked=_text(data.get("user_email_masked")),
+        )
+    return parse_auth_tokens(data)
 
 
 def parse_dashboard_stats(payload: Any) -> DashboardStats:
@@ -276,6 +321,13 @@ def _number_or_default(value: Any, field: str, default: float) -> float:
 
 def _text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
+
+
+def _required_text(value: Any, field: str) -> str:
+    parsed = _text(value)
+    if not parsed:
+        raise Sub2APIModelError(f"{field} must be a non-empty string")
+    return parsed
 
 
 def _datetime_or_none(value: Any, field: str) -> datetime | None:

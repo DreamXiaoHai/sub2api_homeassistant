@@ -5,33 +5,71 @@
     "step": {
       "user": {
         "title": "连接 sub2API",
-        "description": "请输入 sub2API 站点的 HTTPS 地址，以及已登录网页 Local Storage 中的两个令牌。模型 API Key 无法读取订阅数据。",
+        "description": "请输入 sub2API 站点的 HTTPS 地址，并选择 Home Assistant 的认证方式。",
         "data": {
           "base_url": "站点地址",
+          "auth_method": "认证方式"
+        }
+      },
+      "credentials": {
+        "title": "使用邮箱和密码登录",
+        "description": "密码将保存在 Home Assistant 配置存储中，集成不会主动把密码写入日志。如果站点要求 Turnstile、OAuth 或其他交互式登录，请改用手动令牌。",
+        "data": {
+          "email": "邮箱",
+          "password": "密码"
+        }
+      },
+      "tokens": {
+        "title": "使用手动令牌连接",
+        "description": "请输入已登录网页 Local Storage 中的两个令牌。模型 API Key 无法读取这些数据。",
+        "data": {
           "access_token": "访问令牌（auth_token）",
           "refresh_token": "刷新令牌"
         }
       },
+      "totp": {
+        "title": "完成二步认证",
+        "description": "请输入 {email} 当前的六位身份验证器代码。验证码仅使用一次，不会保存。",
+        "data": {
+          "totp_code": "身份验证器代码"
+        }
+      },
       "reauth_confirm": {
         "title": "重新连接 sub2API",
-        "description": "已保存的登录会话无法继续刷新。请输入同一账号的新令牌。",
+        "description": "已保存的登录会话无法继续刷新。请选择如何重新连接同一个账号。",
         "data": {
-          "access_token": "访问令牌（auth_token）",
-          "refresh_token": "刷新令牌"
+          "auth_method": "认证方式"
+        }
+      },
+      "reconfigure": {
+        "title": "更改 sub2API 认证方式",
+        "description": "请选择新的认证方式。替换后的登录信息或令牌必须属于当前已经配置的账号。",
+        "data": {
+          "auth_method": "认证方式"
         }
       }
     },
     "error": {
       "cannot_connect": "无法连接 sub2API 站点。",
-      "invalid_auth": "访问令牌或刷新令牌无效。",
+      "invalid_auth": "已保存的认证信息不再有效。",
+      "invalid_credentials": "邮箱或密码登录被拒绝。请检查登录信息；如果站点要求 Turnstile 或 OAuth，请使用手动令牌。",
       "invalid_response": "站点返回了不支持的数据。",
+      "invalid_totp": "身份验证器代码无效，或二步认证会话已经过期。",
       "invalid_url": "请输入有效的 HTTPS 站点地址。",
       "unknown": "发生未知错误。",
-      "wrong_account": "这些令牌属于另一个账号。"
+      "wrong_account": "这些登录信息或令牌属于另一个账号。"
     },
     "abort": {
       "already_configured": "这个 sub2API 账号已经配置。",
       "reauth_successful": "认证信息已更新。"
+    }
+  },
+  "selector": {
+    "auth_method": {
+      "options": {
+        "credentials": "邮箱和密码",
+        "token": "手动填写访问令牌和刷新令牌"
+      }
     }
   },
   "entity": {

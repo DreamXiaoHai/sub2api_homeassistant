@@ -7,8 +7,12 @@ from datetime import UTC, datetime
 import pytest
 
 from custom_components.sub2api.models import (
+    AuthTokens,
     Sub2APIModelError,
+    TotpChallenge,
+    parse_auth_tokens,
     parse_dashboard_stats,
+    parse_login_result,
     parse_subscriptions,
 )
 
@@ -44,6 +48,43 @@ def test_parse_screenshot_dashboard_tokens(dashboard_payload) -> None:
     assert stats.total_tokens == 395_900_000
     assert stats.total_input_tokens == 11_500_000
     assert stats.total_output_tokens == 800_600
+
+
+def test_parse_password_login_token_pair() -> None:
+    result = parse_login_result(
+        {
+            "access_token": "access",
+            "refresh_token": "refresh",
+            "expires_in": 7200,
+        }
+    )
+
+    assert result == AuthTokens("access", "refresh")
+
+
+def test_parse_password_login_totp_challenge() -> None:
+    result = parse_login_result(
+        {
+            "requires_2fa": True,
+            "temp_token": "temporary-login",
+            "user_email_masked": "u***@example.com",
+        }
+    )
+
+    assert result == TotpChallenge("temporary-login", "u***@example.com")
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"access_token": "access"},
+        {"access_token": "", "refresh_token": "refresh"},
+    ],
+)
+def test_malformed_auth_tokens_are_rejected(payload) -> None:
+    with pytest.raises(Sub2APIModelError):
+        parse_auth_tokens(payload)
 
 
 @pytest.mark.parametrize(

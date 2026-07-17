@@ -16,9 +16,9 @@ This integration exposes:
 - Separate devices and sensors for multiple active subscriptions
 
 > [!IMPORTANT]
-> This integration uses the `auth_token` and `refresh_token` from a sub2API
-> web login session. An API key intended for model requests cannot access the
-> subscription endpoints. Never commit tokens to GitHub, send them in chat, or
+> This integration supports email/password login and manually supplied web
+> session tokens. An API key intended for model requests cannot access these
+> endpoints. Never commit passwords or tokens to GitHub, send them in chat, or
 > include them in public logs.
 
 ## Table of contents
@@ -26,7 +26,7 @@ This integration exposes:
 - [How it works](#how-it-works)
 - [Requirements](#requirements)
 - [Installation](#installation)
-- [Getting sub2API tokens](#getting-sub2api-tokens)
+- [Authentication methods](#authentication-methods)
 - [Adding the integration](#adding-the-integration)
 - [Entities](#entities)
 - [Creating a Lovelace dashboard card](#creating-a-lovelace-dashboard-card)
@@ -163,12 +163,32 @@ does not load a new custom integration.
 > correct path is `/config/custom_components/sub2api/manifest.json`, not
 > `/config/custom_components/sub2api/custom_components/sub2api/manifest.json`.
 
-## Getting sub2API tokens
+## Authentication methods
 
-Reading the tokens from a signed-in sub2API page supports third-party sites
-that use CAPTCHA, Turnstile, OAuth, or two-factor authentication.
+### Email and password
 
-In Chrome or Edge:
+This is the recommended method for a normal local sub2API account. Home
+Assistant signs in through `POST /api/v1/auth/login`, stores the email,
+password, and returned token pair, then uses token refresh for routine
+operation.
+
+If the account has TOTP two-factor authentication enabled, setup asks for the
+current six-digit authenticator code. The code and temporary 2FA session are
+used once and are never stored. When a future login requires TOTP again, Home
+Assistant opens a reauthentication flow for a new code.
+
+The password is stored in Home Assistant's config entry storage so the
+integration can recover automatically when a refresh token is rejected.
+Home Assistant config storage is not a dedicated encrypted password vault.
+Use this mode only when the Home Assistant host and its backups are trusted.
+
+Password login cannot complete Cloudflare Turnstile, OAuth, CAPTCHA, or other
+interactive browser challenges. Use manual tokens for those sites.
+
+### Manual tokens
+
+Manual tokens support sites that use Turnstile, OAuth, CAPTCHA, or another
+complex login flow. In Chrome or Edge:
 
 1. Sign in to the target sub2API site.
 2. Press `F12` to open Developer Tools.
@@ -180,23 +200,21 @@ In Chrome or Edge:
 
 In Firefox, use **Storage** > **Local Storage**.
 
-Keep the following in mind:
-
-- Copy only the value, without the field name.
+- Copy only the values, without the field names.
 - Do not use a model API key.
 - Both tokens must come from the same site and account.
 - Prefer a dedicated private browsing session, then close it without signing
   out after Home Assistant has been configured.
-- Do not keep a browser session using the same refresh token active. sub2API
-  rotates refresh tokens, so whichever client refreshes first invalidates the
+- Do not keep another browser using the same refresh token active. sub2API
+  rotates refresh tokens, so the first client to refresh invalidates the
   other client's copy.
 
 > [!WARNING]
 > Current sub2API versions enable IP and User-Agent session binding by default.
-> A token created in a browser can therefore be rejected when Home Assistant
-> on another machine tries to refresh it. If you administer the sub2API site,
-> disable session IP/UA binding for this workflow, or provide Home Assistant
-> with a dedicated session issued in a compatible environment.
+> A browser token may be rejected when Home Assistant on another machine
+> refreshes it. Email/password mode avoids this mismatch by creating the
+> session directly from Home Assistant. For manual tokens, the site
+> administrator may need to disable session IP/UA binding.
 
 ## Adding the integration
 
@@ -206,9 +224,10 @@ After installation and a full Home Assistant restart:
 2. Select **Add integration**.
 3. Search for **sub2API Subscription**.
 4. Enter the base URL of the sub2API site.
-5. Paste the access token, which is `auth_token` in Local Storage.
-6. Paste the refresh token.
-7. Submit the form.
+5. Choose **Email and password** or **Manual access and refresh tokens**.
+6. Enter the requested credentials or tokens.
+7. If prompted, enter the current six-digit TOTP code.
+8. Submit the form.
 
 Use the site root as the base URL:
 
@@ -229,6 +248,11 @@ After setup, the integration page displays the account and every discovered
 subscription device. Different users on the same site and accounts on
 different sub2API sites can be added separately. The same user on the same
 site cannot be added twice.
+
+To switch authentication methods later, open **Settings** >
+**Devices & services**, open the menu for the sub2API config entry, and select
+**Reconfigure**. Replacement credentials or tokens must resolve to the same
+user ID.
 
 ## Entities
 
@@ -406,6 +430,16 @@ hours, for example, is a valid server-side configuration.
 When an access token receives HTTP 401, the integration uses the refresh token
 to obtain and persist a rotated token pair, then retries the original request.
 
+In email/password mode, a refresh token explicitly rejected by sub2API causes
+one password login attempt:
+
+- Without TOTP, the new token pair is saved automatically.
+- With TOTP, Home Assistant requests a current six-digit code.
+- Invalid credentials or an interactive browser challenge starts
+  reauthentication, where manual tokens can be selected instead.
+
+Network failures, rate limits, and server errors never trigger password login.
+
 Home Assistant starts a reauthentication flow when the refresh token cannot
 be used. Common causes include:
 
@@ -417,9 +451,10 @@ be used. Common causes include:
 - The refresh-token cache was cleared during a server restart
 - The site changed its authentication or security policy
 
-When reauthentication is requested, obtain a fresh matching pair of
-`auth_token` and `refresh_token`, then submit them through the Home
-Assistant prompt. The integration does not store the sub2API password.
+During reauthentication or a user-initiated **Reconfigure** flow, the
+authentication method can be changed. Home Assistant verifies that the new
+credentials or tokens still belong to the same sub2API user before replacing
+the saved configuration.
 
 ## Updating and uninstalling
 
@@ -467,6 +502,14 @@ copying.
 - Do not use a model API key.
 - Check whether session IP/User-Agent binding is enabled on the sub2API site.
 - Do not use one rotating refresh token in both a browser and Home Assistant.
+
+### Email/password login is rejected
+
+- Confirm that the login uses the account email address, not the display name.
+- Verify the password by signing in to the sub2API site.
+- If the site shows Turnstile, CAPTCHA, OAuth, or another interactive
+  challenge, choose manual tokens instead.
+- If TOTP is enabled, enter the current six-digit code when prompted.
 
 ### The integration worked until the access token expired
 
@@ -517,7 +560,7 @@ and reset time after the subscription first records usage.
 
 ### Are monthly quotas or subscription-expiration entities supported?
 
-Version `0.2.0` creates daily and weekly quota entities plus today's and
+Version `0.3.0` creates daily and weekly quota entities plus today's and
 cumulative token entities. Monthly quota, subscription status, and
 expiration-time entities are not currently exposed as separate sensors.
 
@@ -530,8 +573,12 @@ into stable unique IDs to avoid entity collisions.
 ## Data and security
 
 - Access and refresh tokens are stored in the Home Assistant config entry.
-- Token fields use password inputs, and tokens are never intentionally logged.
-- The integration does not store the sub2API email address or password.
+- Email and password are also stored when credential mode is selected.
+- Password, token, and TOTP fields use password inputs and are never
+  intentionally logged.
+- TOTP codes, TOTP secrets, and temporary 2FA sessions are never stored.
+- Home Assistant config entries are not a dedicated encrypted secret vault;
+  protect the host and all backups that contain `/config/.storage`.
 - Only HTTPS endpoints are accepted.
 - Monetary values retain the USD unit returned by sub2API.
 - Repository URLs, entity IDs, usernames, and notification actions are
@@ -575,7 +622,8 @@ The tests cover:
 
 - API parsing and malformed responses
 - Access-token expiration and refresh-token rotation
-- Configuration, duplicate accounts, and reauthentication
+- Password login, manual tokens, TOTP, and refresh fallback
+- Configuration migration, duplicate accounts, and reauthentication
 - Daily and weekly sensor creation
 - Today and cumulative token sensors and component attributes
 - Dynamic discovery of subscriptions and quota windows
